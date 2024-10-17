@@ -1,0 +1,67 @@
+@startuml
+mode compact
+
+binary "Latch" as latch
+binary "Clock" as clock
+concise "Data" as data
+
+@latch
+0 is 0
++12 is 1
++12 is 0
+
+@clock
+0 is 1
++30 is 0
++6 is 1
++6 is 0
++6 is 1
++6 is 0
++6 is 1
++6 is 0
++6 is 1
++6 is 0
++6 is 1
++6 is 0
++6 is 1
++6 is 0
++6 is 1
++6 is 0
++6 is 1
++6 is 0
++6 is 1
++6 is 0
++6 is 1
++6 is 0
++6 is 1
++6 is 0
++6 is 1
++6 is 0
++6 is 1
++6 is 0
++6 is 1
++6 is 0
++6 is 1
++6 is 0
++6 is 1
+
+@data
+24 is "B"
++12 is "Y"
++12 is "SL"
++12 is "ST"
++12 is "↑"
++12 is "↓"
++12 is "←"
++12 is "→"
++12 is "A"
++12 is "X"
++12 is "L"
++12 is "R"
++12 is ""
++12 is ""
++12 is ""
++12 is ""
++12 is {hidden}
+
+@enduml
