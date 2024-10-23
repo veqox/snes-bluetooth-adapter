@@ -14,7 +14,7 @@ fn main() -> ! {
 
     let timg0 = esp_hal::timer::timg::TimerGroup::new(peripherals.TIMG0);
     let _init = esp_wifi::init(
-        esp_wifi::EspWifiInitFor::Wifi,
+        esp_wifi::EspWifiInitFor::Ble,
         timg0.timer0,
         esp_hal::rng::Rng::new(peripherals.RNG),
         peripherals.RADIO_CLK,
