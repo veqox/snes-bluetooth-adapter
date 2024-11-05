@@ -4,6 +4,9 @@ on:
   push:
     paths-ignore:
       - "**/README.md"
+      - "docs/**"
+      - "scripts/**"
+      - ".gitignore"
   pull_request:
   workflow_dispatch:
 
