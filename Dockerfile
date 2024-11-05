@@ -7,7 +7,7 @@ FROM docker.io/archlinux:base-devel AS build
 
 COPY --from=git /qemu /qemu
 
-RUN pacman -Sy --noconfirm git python ninja pixman libgcrypt sdl2 libslirp
+RUN pacman -Sy --noconfirm git python ninja libgcrypt sdl2 libslirp pixman
 
 WORKDIR /qemu
 RUN sed -z -i "s/\(.*dependency('libgcrypt'.*method: '\)config-tool\('.*\)/\1pkg-config\2/g" -- meson.build
@@ -26,4 +26,4 @@ WORKDIR /
 RUN rm -rf qemu
 RUN pacman -Scc --noconfirm
 
-ENTRYPOINT ["/bin/bash"]
+ENTRYPOINT ["/usr/local/bin/qemu-system-riscv32"]

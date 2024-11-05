@@ -27,3 +27,48 @@ cargo build [-r]
 ```bash
 cargo run [-r]
 ```
+
+## Emulation
+
+The run scripts do not build the project before running the emulation.
+
+### Docker
+
+#### Prerequisites
+
+- [docker](https://docs.docker.com/get-docker/)
+
+#### Setup
+
+```bash
+./scripts/setup_qemu_docker.sh
+```
+
+#### Run
+
+```bash
+./scripts/run_qemu_docker.sh
+```
+
+### Local
+
+#### Prerequisites
+
+- [espressif-qemu](https://github.com/espressif/esp-toolchain-docs/blob/main/qemu/esp32c3/README.md#prerequisites)
+
+#### Setup
+
+```bash
+./scripts/setup_qemu.sh
+```
+
+#### Run
+
+```bash
+./scripts/run_qemu.sh
+```
+
+## References
+
+- [esp32c3-qemu](https://github.com/espressif/esp-toolchain-docs/blob/main/qemu/esp32c3/README.md)
+- [esp32c3-qemu-docker](https://github.com/svenstaro/qemu-espressif-docker/blob/main/Dockerfile)

@@ -11,3 +11,6 @@ target/
 
 # espressif qemu fork
 qemu/
+
+# qemu logs
+**/*.log
