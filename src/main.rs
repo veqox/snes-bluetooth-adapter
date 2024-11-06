@@ -12,17 +12,17 @@ fn main() -> ! {
 
     esp_println::logger::init_logger_from_env();
 
-    let timg0 = esp_hal::timer::timg::TimerGroup::new(peripherals.TIMG0);
-    let _init = esp_wifi::init(
-        esp_wifi::EspWifiInitFor::Ble,
-        timg0.timer0,
-        esp_hal::rng::Rng::new(peripherals.RNG),
-        peripherals.RADIO_CLK,
-    )
-    .unwrap();
+    let mut state = state::State::default();
+    state.set_b(false);
+    state.set_y(false);
+    state.set_start(false);
+
+    log::info!("{}", state);
 
     loop {
-        log::info!("Hello world!");
+        let cycle = state.cycle();
+        let btn_state = state.next();
+        log::info!("{}: {}", cycle, btn_state);
         delay.delay(500.millis());
     }
 }

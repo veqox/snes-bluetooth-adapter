@@ -12,7 +12,7 @@ esp-backtrace = { version = "0.14.2", features = [
     "panic-handler",
     "println",
 ] }
-esp-hal = { version = "0.21.0", features = ["esp32c3"] }
+esp-hal = { version = "0.21.1", features = ["esp32c3"] }
 esp-println = { version = "0.12.0", features = ["esp32c3", "log"] }
 log = { version = "0.4.22" }
 embedded-io = "0.6.1"
@@ -34,6 +34,7 @@ smoltcp = { version = "0.11.0", default-features = false, features = [
     "socket-tcp",
     "socket-udp",
 ] }
+state = { path = "crates/state" }
 [profile.dev]
 # Rust debug is too slow.
 # For debug builds always builds with some optimization
