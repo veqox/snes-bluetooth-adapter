@@ -12,13 +12,17 @@
 
 | Pin  | Description  | Color |
 | :--: | :----------- | :---: |
-|  1   | +5 V         |  ⚪  |
+|  1   | +5 V         |  🟢  |
 |  2   | Data clock   |  🟡  |
-|  3   | Data latch   |  🟠  |
+|  3   | Data latch   |  ⚪  |
 |  4   | Serial data  |  🔴  |
 |  5   | N/C          |  ◯  |
 |  6   | N/C          |  ◯  |
-|  7   | Ground       |  🟤  |
+|  7   | Ground       |  ⚫  |
+
+> [!NOTE]
+> The colors are not standard and are just for reference. \
+> To get your colors, you can use a multimeter to check the continuity between the pins and the cable.
 
 ## Communication Protocol
 
