@@ -128,6 +128,10 @@ impl State {
         self.write_bit(value.into(), R_OFFSET);
     }
 
+    pub fn reset_cycle(&mut self) {
+        self.set_cycle(0);
+    }
+
     /// Sets the cycle to the given value.
     /// When the value exceeds 15 it will be automatically cut off because the cycle bits are located at the end of the value
     /// When writing the value it is shifted by 12 bits to the left cutting off the fifth bit making it impossible to exceed 15

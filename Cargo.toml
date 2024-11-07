@@ -35,6 +35,7 @@ smoltcp = { version = "0.11.0", default-features = false, features = [
     "socket-udp",
 ] }
 state = { path = "crates/state" }
+critical-section = "1.2.0"
 [profile.dev]
 # Rust debug is too slow.
 # For debug builds always builds with some optimization
