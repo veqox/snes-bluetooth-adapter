@@ -1,89 +1,49 @@
 #![no_std]
 #![no_main]
 
-use core::cell::RefCell;
-
-use critical_section::Mutex;
+use embedded_io::{Read, Write};
 use esp_backtrace as _;
-use esp_hal::{
-    delay::Delay,
-    gpio::{Event, Input, Io, Level, Output, Pull},
-    prelude::*,
-};
-use state::State;
+use esp_hal::{prelude::*, timer::timg::TimerGroup};
+use esp_println;
+use esp_wifi::ble::controller::BleConnector;
 
-static SERIAL: Mutex<RefCell<Option<Output>>> = Mutex::new(RefCell::new(None));
-static LATCH: Mutex<RefCell<Option<Input>>> = Mutex::new(RefCell::new(None));
-static CLOCK: Mutex<RefCell<Option<Input>>> = Mutex::new(RefCell::new(None));
-static STATE: Mutex<RefCell<Option<State>>> = Mutex::new(RefCell::new(None));
+const MAX_BLE_PACKET_SIZE: usize = 33;
 
 #[entry]
 fn main() -> ! {
-    #[allow(unused)]
-    let peripherals = esp_hal::init(esp_hal::Config::default());
-    let delay = Delay::new();
-
-    let mut io = Io::new(peripherals.GPIO, peripherals.IO_MUX);
-    io.set_interrupt_handler(interrupt_handler);
-
-    let serial = Output::new(io.pins.gpio4, Level::High);
-    let mut clock = Input::new(io.pins.gpio5, Pull::Up);
-    let mut latch = Input::new(io.pins.gpio6, Pull::Up);
-    let mut state = State::default();
-    state.set_a(true);
-
-    critical_section::with(|cs| {
-        latch.listen(Event::FallingEdge);
-        LATCH.borrow_ref_mut(cs).replace(latch);
-
-        clock.listen(Event::RisingEdge);
-        CLOCK.borrow_ref_mut(cs).replace(clock);
-
-        STATE.borrow_ref_mut(cs).replace(state);
-
-        SERIAL.borrow_ref_mut(cs).replace(serial);
-    });
-
     esp_println::logger::init_logger_from_env();
 
-    loop {
-        critical_section::with(|cs| STATE.borrow_ref_mut(cs).as_mut().unwrap().set_a(true));
-        delay.delay_millis(1000);
-        critical_section::with(|cs| STATE.borrow_ref_mut(cs).as_mut().unwrap().set_a(false));
-        delay.delay_millis(1000)
+    esp_alloc::heap_allocator!(72 * 1024);
+
+    let peripherals = esp_hal::init(esp_hal::Config::default());
+
+    let timg0 = TimerGroup::new(peripherals.TIMG0);
+
+    let init = esp_wifi::init(
+        esp_wifi::EspWifiInitFor::Ble,
+        timg0.timer0,
+        esp_hal::rng::Rng::new(peripherals.RNG),
+        peripherals.RADIO_CLK,
+    )
+    .unwrap_or_else(|err| {
+        log::error!("{:?}", err);
+        panic!("ble failed to initialize");
+    });
+
+    let mut connector = BleConnector::new(&init, peripherals.BT);
+
+    match connector.write(&[0x08, 0x09]) {
+        Ok(len) => log::info!("{} bytes written", len),
+        Err(err) => log::warn!("{:?}", err),
     }
-}
 
-#[handler]
-#[ram]
-fn interrupt_handler() {
-    critical_section::with(|cs| {
-        if LATCH.borrow_ref(cs).as_ref().unwrap().is_interrupt_set() {
-            STATE.borrow_ref_mut(cs).as_mut().unwrap().reset_cycle();
+    loop {
+        let mut buf = [0; MAX_BLE_PACKET_SIZE];
 
-            SERIAL
-                .borrow_ref_mut(cs)
-                .as_mut()
-                .unwrap()
-                .set_level(STATE.borrow_ref_mut(cs).as_mut().unwrap().next().into());
-
-            LATCH.borrow_ref_mut(cs).as_mut().unwrap().clear_interrupt()
+        match connector.read(&mut buf) {
+            Ok(0) => continue,
+            Ok(len) => log::info!("{:?}", &buf[0..len]),
+            Err(err) => log::warn!("{:?}", err),
         };
-    });
-
-    critical_section::with(|cs| {
-        if CLOCK.borrow_ref(cs).as_ref().unwrap().is_interrupt_set() {
-            if STATE.borrow_ref(cs).as_ref().unwrap().cycle() == 16 {
-                SERIAL.borrow_ref_mut(cs).as_mut().unwrap().set_high();
-            } else {
-                SERIAL
-                    .borrow_ref_mut(cs)
-                    .as_mut()
-                    .unwrap()
-                    .set_level(STATE.borrow_ref_mut(cs).as_mut().unwrap().next().into());
-            }
-
-            CLOCK.borrow_ref_mut(cs).as_mut().unwrap().clear_interrupt()
-        };
-    });
+    }
 }
