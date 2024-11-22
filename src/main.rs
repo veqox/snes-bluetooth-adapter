@@ -1,13 +1,13 @@
 #![no_std]
 #![no_main]
 
-use embedded_io::{Read, Write};
+use ble::Ble;
 use esp_backtrace as _;
 use esp_hal::{prelude::*, timer::timg::TimerGroup};
 use esp_println;
 use esp_wifi::ble::controller::BleConnector;
 
-const MAX_BLE_PACKET_SIZE: usize = 33;
+const MAX_BLE_PACKET_SIZE: usize = 255;
 
 #[entry]
 fn main() -> ! {
@@ -15,7 +15,11 @@ fn main() -> ! {
 
     esp_alloc::heap_allocator!(72 * 1024);
 
-    let peripherals = esp_hal::init(esp_hal::Config::default());
+    let peripherals = esp_hal::init({
+        let mut config = esp_hal::Config::default();
+        config.cpu_clock = CpuClock::max();
+        config
+    });
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
 
@@ -31,16 +35,15 @@ fn main() -> ! {
     });
 
     let mut connector = BleConnector::new(&init, peripherals.BT);
-
-    match connector.write(&[0x08, 0x09]) {
-        Ok(len) => log::info!("{} bytes written", len),
-        Err(err) => log::warn!("{:?}", err),
-    }
+    let mut ble = Ble::new(&mut connector);
+    ble.set_le_scan_parameters()
+        .expect("hci failed to set scan parameters");
+    ble.set_le_scan_enable().expect("hci failed to enable scan");
 
     loop {
         let mut buf = [0; MAX_BLE_PACKET_SIZE];
 
-        match connector.read(&mut buf) {
+        match ble.read(&mut buf) {
             Ok(0) => continue,
             Ok(len) => log::info!("{:?}", &buf[0..len]),
             Err(err) => log::warn!("{:?}", err),
