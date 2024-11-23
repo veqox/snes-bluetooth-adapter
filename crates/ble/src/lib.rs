@@ -1,33 +1,29 @@
 #![no_std]
+#![allow(dead_code)]
 
 pub mod packet;
 
-use embedded_io::{ErrorType, Read, Write};
+use embedded_io::{Read, Write};
 use esp_wifi::ble::controller::{BleConnector, BleConnectorError};
 use packet::{HCICommandPacket, HCIPacket};
 
 pub struct Ble<'d> {
     connector: &'d mut BleConnector<'d>,
-    buf: [u8; 255],
-}
-
-impl<'d> ErrorType for Ble<'d> {
-    type Error = BleConnectorError;
+    buf: [u8; 1000],
 }
 
 impl<'d> Ble<'d> {
     pub fn new(connector: &'d mut BleConnector<'d>) -> Ble<'d> {
         Ble {
             connector,
-            buf: [0; 255],
+            buf: [0; 1000],
         }
     }
 
     pub fn reset(&mut self) -> Result<usize, BleConnectorError> {
         self.write(
             HCICommandPacket {
-                opcode: 0x0C03,
-                length: 0,
+                opcode: packet::HCI_RESET_COMMAND,
                 parameters: &[],
             }
             .into(),
@@ -37,8 +33,7 @@ impl<'d> Ble<'d> {
     pub fn set_le_scan_enable(&mut self) -> Result<usize, BleConnectorError> {
         self.write(
             HCICommandPacket {
-                opcode: 0x0C20,
-                length: 0x02,
+                opcode: packet::HCI_SET_SCAN_ENABLE_COMMAND,
                 parameters: &[0x01, 0x00],
             }
             .into(),
@@ -46,10 +41,14 @@ impl<'d> Ble<'d> {
     }
 
     pub fn set_le_scan_parameters(&mut self) -> Result<usize, BleConnectorError> {
+        // 0x01: active scanning
+        // 0x10 + 0x00: scan interval
+        // 0x10 + 0x00: scan window
+        // 0x00: own address type
+        // 0x00: filter policy
         self.write(
             HCICommandPacket {
-                opcode: 0x0B20,
-                length: 0x07,
+                opcode: packet::HCI_SET_SCAN_ENABLE_COMMAND,
                 parameters: &[0x01, 0x10, 0x00, 0x10, 0x00, 0x00, 0x00],
             }
             .into(),
@@ -57,7 +56,7 @@ impl<'d> Ble<'d> {
     }
 
     pub fn write(&mut self, packet: HCIPacket) -> Result<usize, BleConnectorError> {
-        let len = packet.read(&mut self.buf).unwrap();
+        let len = packet.write_to_buffer(&mut self.buf).unwrap();
         self.connector.write(&self.buf[..len])
     }
 

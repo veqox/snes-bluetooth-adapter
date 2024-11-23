@@ -1,10 +1,9 @@
 #![no_std]
 #![no_main]
 
-use ble::Ble;
+use ble::{packet::HCIPacket, Ble};
 use esp_backtrace as _;
 use esp_hal::{prelude::*, timer::timg::TimerGroup};
-use esp_println;
 use esp_wifi::ble::controller::BleConnector;
 
 const MAX_BLE_PACKET_SIZE: usize = 255;
@@ -15,11 +14,7 @@ fn main() -> ! {
 
     esp_alloc::heap_allocator!(72 * 1024);
 
-    let peripherals = esp_hal::init({
-        let mut config = esp_hal::Config::default();
-        config.cpu_clock = CpuClock::max();
-        config
-    });
+    let peripherals = esp_hal::init(esp_hal::Config::default());
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
 
@@ -45,7 +40,45 @@ fn main() -> ! {
 
         match ble.read(&mut buf) {
             Ok(0) => continue,
-            Ok(len) => log::info!("{:?}", &buf[0..len]),
+            Ok(len) => match HCIPacket::read_from_slice(&buf[0..len]) {
+                Ok(packet) => match packet {
+                    HCIPacket::HCIEventPacket(packet) => match packet.evcode {
+                        0x02 => log::info!("hci: LE connection complete"),
+                        0x3E => {
+                            log::info!("hci: LE advertising report");
+                            log::info!("sub_event_code: {}", packet.parameters[0]);
+                            log::info!("num_of_reports: {}", packet.parameters[1]);
+                            for i in 0..packet.parameters[1] {
+                                let offset = 2 + i as usize * 12;
+                                log::info!("event_type: {}", packet.parameters[offset]);
+                                log::info!("address_type: {}", packet.parameters[offset + 1]);
+                                log::info!(
+                                    "address: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                                    packet.parameters[offset + 2],
+                                    packet.parameters[offset + 3],
+                                    packet.parameters[offset + 4],
+                                    packet.parameters[offset + 5],
+                                    packet.parameters[offset + 6],
+                                    packet.parameters[offset + 7],
+                                );
+                                log::info!("data_length: {}", packet.parameters[8]);
+                                log::info!(
+                                    "data: {:?}",
+                                    &packet.parameters[offset + 9
+                                        ..offset + 9 + packet.parameters[offset + 8] as usize]
+                                );
+                                log::info!(
+                                    "rss: {}",
+                                    packet.parameters[10 + packet.parameters[offset + 8] as usize]
+                                )
+                            }
+                        }
+                        _ => log::warn!("hci: unexpected event code: {:?}", packet.evcode),
+                    },
+                    _ => log::warn!("unexpected packet: {:?}", packet),
+                },
+                Err(err) => log::warn!("{:?}", err),
+            },
             Err(err) => log::warn!("{:?}", err),
         };
     }
