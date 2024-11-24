@@ -7,3 +7,4 @@ edition = "2021"
 embedded-io = "0.6.1"
 esp-wifi = { version = "0.10.1", features = ["esp32c3", "ble"] }
 macros = { path = "../macros" }
+utils = { path = "../utils" }

@@ -8,6 +8,7 @@ use ble::{
 use esp_backtrace as _;
 use esp_hal::{prelude::*, timer::timg::TimerGroup};
 use esp_wifi::ble::controller::BleConnector;
+use utils::Reader;
 
 const MAX_BLE_PACKET_SIZE: usize = 255;
 
@@ -46,38 +47,39 @@ fn main() -> ! {
             Ok(len) => match HCIPacket::read_from_slice(&buf[0..len]) {
                 Ok(packet) => match packet {
                     HCIPacket::HCIEventPacket(packet) => match packet.evcode {
-                        HCIEventCode::CommandComplete => log::info!("hci: LE connection complete"),
+                        HCIEventCode::CommandComplete => log::info!("hci: command complete"),
                         HCIEventCode::LEMetaEvent => {
+                            let mut reader = Reader::new(packet.parameters);
+                            let sub_event_code =
+                                ble::packet::LESubeventCode::from(reader.read_u8());
+                            let num_of_reports = reader.read_u8();
+
                             log::info!("hci: LE advertising report");
-                            log::info!(
-                                "sub_event_code: {:?}",
-                                ble::packet::LESubeventCode::from(packet.parameters[0]),
-                            );
-                            log::info!("num_of_reports: {}", packet.parameters[1]);
-                            for i in 0..packet.parameters[1] {
-                                let offset = 2 + i as usize * 12;
-                                log::info!("event_type: {}", packet.parameters[offset]);
-                                log::info!("address_type: {}", packet.parameters[offset + 1]);
+                            log::info!("sub_event_code: {:?}", sub_event_code);
+                            log::info!("num_of_reports: {}", num_of_reports);
+
+                            for _ in 0..num_of_reports {
+                                let event_type = reader.read_u8();
+                                let address_type = reader.read_u8();
+                                let address = reader.read_slice(6);
+                                let data_length = reader.read_u8();
+                                let data = reader.read_slice(data_length as usize);
+                                let rssi = reader.read_u8() as i8;
+
+                                log::info!("event_type: {}", event_type);
+                                log::info!("address_type: {}", address_type);
                                 log::info!(
                                     "address: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                                    packet.parameters[offset + 2],
-                                    packet.parameters[offset + 3],
-                                    packet.parameters[offset + 4],
-                                    packet.parameters[offset + 5],
-                                    packet.parameters[offset + 6],
-                                    packet.parameters[offset + 7],
+                                    address[0],
+                                    address[1],
+                                    address[2],
+                                    address[3],
+                                    address[4],
+                                    address[5],
                                 );
-                                log::info!("data_length: {}", packet.parameters[offset + 8]);
-                                log::info!(
-                                    "data: {:?}",
-                                    &packet.parameters[offset + 9
-                                        ..offset + 9 + packet.parameters[offset + 8] as usize]
-                                );
-                                log::info!(
-                                    "rss: {}",
-                                    packet.parameters[10 + packet.parameters[offset + 8] as usize]
-                                        as i8
-                                )
+                                log::info!("data_length: {}", data_length);
+                                log::info!("data: {:?}", data);
+                                log::info!("rss: {}", rssi);
                             }
                         }
                     },

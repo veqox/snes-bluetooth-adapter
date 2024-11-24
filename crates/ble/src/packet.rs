@@ -1,6 +1,7 @@
 use core::{fmt::Display, u16};
 
 use macros::{FromU8, IntoU8};
+use utils::{Reader, Writer};
 
 const HCI_COMMAND_HEADER_SIZE: usize = 3;
 const HCI_COMMAND_MAX_PACKET_SIZE: usize = 255 + HCI_COMMAND_HEADER_SIZE;
@@ -211,60 +212,5 @@ impl<'p> HCIPacket<'p> {
             }
             _ => Err(HCIPacketError),
         }
-    }
-}
-
-struct Writer<'p> {
-    buf: &'p mut [u8],
-    pos: usize,
-}
-
-impl<'p> Writer<'p> {
-    fn new(buf: &'p mut [u8]) -> Self {
-        Self { buf, pos: 0 }
-    }
-
-    fn write_u8(&mut self, value: u8) {
-        self.buf[self.pos] = value;
-        self.pos += 1;
-    }
-
-    fn write_u16(&mut self, value: u16) {
-        self.buf[self.pos..(self.pos + 2)].copy_from_slice(&value.to_le_bytes());
-        self.pos += 2;
-    }
-
-    fn write_slice(&mut self, slice: &[u8]) {
-        self.buf[self.pos..(self.pos + slice.len())].copy_from_slice(slice);
-        self.pos += slice.len();
-    }
-}
-
-struct Reader<'p> {
-    buf: &'p [u8],
-    pos: usize,
-}
-
-impl<'p> Reader<'p> {
-    fn new(buf: &'p [u8]) -> Self {
-        Self { buf, pos: 0 }
-    }
-
-    fn read_u8(&mut self) -> u8 {
-        let value = self.buf[self.pos];
-        self.pos += 1;
-        value
-    }
-
-    fn read_u16(&mut self) -> u16 {
-        let value = u16::from_le_bytes([self.buf[self.pos], self.buf[self.pos + 1]]);
-        self.pos += 2;
-        value
-    }
-
-    fn read_slice(&mut self, len: usize) -> &'p [u8] {
-        let slice = &self.buf[self.pos..(self.pos + len)];
-        self.pos += len;
-        slice
     }
 }
