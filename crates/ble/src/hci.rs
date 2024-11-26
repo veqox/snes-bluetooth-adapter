@@ -1,13 +1,11 @@
-use core::{fmt::Display, u16};
-
 use macros::{FromU8, IntoU8, Size};
 use utils::{Reader, Writer};
 
 const HCI_COMMAND_HEADER_SIZE: usize = 3;
-pub(super) const HCI_COMMAND_MAX_PACKET_SIZE: usize = 255 + HCI_COMMAND_HEADER_SIZE;
+pub(crate) const HCI_COMMAND_MAX_PACKET_SIZE: usize = 255 + HCI_COMMAND_HEADER_SIZE;
 
 const HCI_EVENT_HEADER_SIZE: usize = 2;
-const HCI_EVENT_MAX_PACKET_SIZE: usize = 255 + HCI_EVENT_HEADER_SIZE;
+pub(crate) const HCI_EVENT_MAX_PACKET_SIZE: usize = 255 + HCI_EVENT_HEADER_SIZE;
 
 // Bluetooth Core spec 6.0 | [Vol 4] Part A, Section 2 | page 1726
 const HCI_COMMAND_PACKET_TYPE: u8 = 0x01;
@@ -47,6 +45,9 @@ const OGF_TESTING_COMMAND: u16 = 0x06;
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.7 | page 2240
 // Events
 
+const HCI_COMMAND_COMPLETE_EVENT_CODE: u8 = 0x0E;
+const HCI_LE_META_EVENT_CODE: u8 = 0x3E;
+
 #[derive(Debug, FromU8, IntoU8)]
 #[repr(u8)]
 pub enum HCIEventCode {
@@ -56,7 +57,7 @@ pub enum HCIEventCode {
 
 #[derive(Debug, FromU8, IntoU8)]
 #[repr(u8)]
-pub enum LESubeventCode {
+pub enum SubeventCode {
     ConnectionComplete = 0x01,                        // 7.7.65.1
     AdvertisingReport = 0x02,                         // 7.7.65.2
     ConnectionUpdateComplete = 0x03,                  // 7.7.65.3
@@ -130,9 +131,10 @@ pub const HCI_READ_LOCAL_SUPPORTED_COMMANDS_COMMAND: u16 =
     OCF_READ_LOCAL_SUPPORTED_COMMANDS | OGF_INFORMATIONAL_PARAMETERS_COMMAND << 10;
 
 #[derive(Debug)]
-pub struct HCICommandPacket<'p> {
+pub struct CommandPacket {
     pub opcode: u16,
-    pub parameters: &'p [u8],
+    pub len: u8,
+    pub parameters: [u8; 255],
 }
 
 #[derive(Debug)]
@@ -143,7 +145,7 @@ pub enum HCICommand {
 }
 
 impl HCICommand {
-    pub fn write_to_buffer(self, buf: &mut [u8]) -> usize {
+    pub fn write_into(self, buf: &mut [u8]) -> usize {
         let mut writer = Writer::new(buf);
         writer.write_u8(HCI_COMMAND_PACKET_TYPE);
         match self {
@@ -188,12 +190,6 @@ pub struct ScanEnableCommand {
     pub filter_duplicates: u8,
 }
 
-impl<'p> Into<HCIPacket<'p>> for HCICommandPacket<'p> {
-    fn into(self) -> HCIPacket<'p> {
-        HCIPacket::HCICommandPacket(self)
-    }
-}
-
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 5.4.4 | page 1877
 #[derive(Debug)]
 pub struct HCIEventPacket<'p> {
@@ -201,66 +197,60 @@ pub struct HCIEventPacket<'p> {
     pub parameters: &'p [u8],
 }
 
-impl<'p> Into<HCIPacket<'p>> for HCIEventPacket<'p> {
-    fn into(self) -> HCIPacket<'p> {
-        HCIPacket::HCIEventPacket(self)
-    }
-}
-
 #[derive(Debug)]
-pub enum HCIPacket<'p> {
-    HCICommandPacket(HCICommandPacket<'p>),
-    HCIEventPacket(HCIEventPacket<'p>),
+pub enum HCIEvent<'p> {
+    CommandComplete(CommandCompleteEvent<'p>), // 7.7.14 Command Complete event
+    LEMetaEvent(LEMetaEvent<'p>),              // 7.7.65 LE Meta event
 }
 
-#[derive(Debug)]
-pub struct HCIPacketError;
-
-impl Display for HCIPacketError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str("HCIPacketError")
-    }
-}
-
-impl<'p> HCIPacket<'p> {
-    pub fn write_to_buffer(self, buf: &mut [u8]) -> Result<usize, HCIPacketError> {
-        let mut writer = Writer::new(buf);
-        match self {
-            Self::HCICommandPacket(packet) => {
-                writer.write_u8(HCI_COMMAND_PACKET_TYPE);
-                writer.write_u16(packet.opcode);
-                writer.write_u8(packet.parameters.len() as u8);
-                writer.write_slice(packet.parameters);
-                Ok(writer.pos)
-            }
-            Self::HCIEventPacket(packet) => {
-                writer.write_u8(HCI_EVENT_PACKET_TYPE);
-                writer.write_u8(packet.evcode.into());
-                writer.write_u8(packet.parameters.len() as u8);
-                writer.write_slice(packet.parameters);
-                Ok(writer.pos)
-            }
-        }
-    }
-
-    pub fn read_from_slice(slice: &'p [u8]) -> Result<Self, HCIPacketError> {
+impl<'p> HCIEvent<'p> {
+    pub fn read_from(slice: &'p [u8]) -> HCIEvent {
         let mut reader = Reader::new(slice);
-        match reader.read_u8() {
-            HCI_COMMAND_PACKET_TYPE => {
-                let opcode = reader.read_u16();
-                let parameters_len = reader.read_u8() as usize;
-                let parameters = reader.read_slice(parameters_len);
 
-                Ok(HCICommandPacket { opcode, parameters }.into())
-            }
-            HCI_EVENT_PACKET_TYPE => {
-                let evcode = reader.read_u8().into();
-                let parameters_len = reader.read_u8() as usize;
-                let parameters = reader.read_slice(parameters_len);
+        let packet_type = reader.read_u8();
+        let event_code = reader.read_u8();
+        let _len = reader.read_u8() as usize;
 
-                Ok(HCIEventPacket { evcode, parameters }.into())
-            }
-            _ => Err(HCIPacketError),
+        match packet_type {
+            HCI_EVENT_PACKET_TYPE => match event_code.into() {
+                HCIEventCode::CommandComplete => HCIEvent::CommandComplete(CommandCompleteEvent {
+                    num_hci_command_packets: reader.read_u8(),
+                    command_opcode: reader.read_u16(),
+                    return_parameters: reader.read_slice(reader.remaining()),
+                }),
+                HCIEventCode::LEMetaEvent => match reader.read_u8().into() {
+                    SubeventCode::AdvertisingReport => HCIEvent::LEMetaEvent(
+                        LEMetaEvent::AdvertisingReport(AdvertisingReportEvent {
+                            data: reader.read_slice(reader.remaining()),
+                        }),
+                    ),
+                    subevent => unimplemented!("{:?}", subevent),
+                },
+            },
+            _ => unimplemented!(),
         }
     }
+}
+
+#[derive(Debug)]
+pub struct CommandCompleteEvent<'p> {
+    pub num_hci_command_packets: u8,
+    pub command_opcode: u16,
+    pub return_parameters: &'p [u8],
+}
+
+#[derive(Debug)]
+pub enum LEMetaEvent<'p> {
+    AdvertisingReport(AdvertisingReportEvent<'p>),
+    ReadAllRemoteFeaturesComplete(ReadAllRemoteFeaturesCompleteEvent<'p>),
+}
+
+#[derive(Debug)]
+pub struct AdvertisingReportEvent<'p> {
+    pub data: &'p [u8],
+}
+
+#[derive(Debug)]
+pub struct ReadAllRemoteFeaturesCompleteEvent<'p> {
+    pub data: &'p [u8],
 }

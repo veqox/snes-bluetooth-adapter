@@ -8,3 +8,4 @@ embedded-io = "0.6.1"
 esp-wifi = { version = "0.10.1", features = ["esp32c3", "ble"] }
 macros = { path = "../macros" }
 utils = { path = "../utils" }
+log = { version = "0.4.22" }

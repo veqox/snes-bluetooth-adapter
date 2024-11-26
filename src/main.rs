@@ -2,7 +2,7 @@
 #![no_main]
 
 use ble::{
-    packet::{HCICommand, HCIEventCode, HCIPacket, ScanEnableCommand, SetScanParametersCommand},
+    hci::{HCICommand, HCIEvent, LEMetaEvent, ScanEnableCommand, SetScanParametersCommand},
     Ble,
 };
 use esp_backtrace as _;
@@ -55,48 +55,47 @@ fn main() -> ! {
 
         match ble.read(&mut buf) {
             Ok(0) => continue,
-            Ok(len) => match HCIPacket::read_from_slice(&buf[0..len]) {
-                Ok(packet) => match packet {
-                    HCIPacket::HCIEventPacket(packet) => match packet.evcode {
-                        HCIEventCode::CommandComplete => log::info!("hci: command complete"),
-                        HCIEventCode::LEMetaEvent => {
-                            let mut reader = Reader::new(packet.parameters);
-                            let sub_event_code =
-                                ble::packet::LESubeventCode::from(reader.read_u8());
-                            let num_of_reports = reader.read_u8();
+            Ok(len) => match HCIEvent::read_from(&buf[0..len]) {
+                HCIEvent::CommandComplete(event) => {
+                    log::info!("hci: command complete");
+                    log::info!("num_hci_command_packets: {}", event.num_hci_command_packets);
+                    log::info!("command_opcode: {}", event.command_opcode);
+                    log::info!("return_parameters: {:?}", event.return_parameters);
+                }
+                HCIEvent::LEMetaEvent(event) => match event {
+                    LEMetaEvent::AdvertisingReport(event) => {
+                        let mut reader = Reader::new(event.data);
+                        let num_of_reports = reader.read_u8();
 
-                            log::info!("hci: LE advertising report");
-                            log::info!("sub_event_code: {:?}", sub_event_code);
-                            log::info!("num_of_reports: {}", num_of_reports);
+                        log::info!("hci: LE advertising report");
+                        log::info!("num_of_reports: {}", num_of_reports);
 
-                            for _ in 0..num_of_reports {
-                                let event_type = reader.read_u8();
-                                let address_type = reader.read_u8();
-                                let address = reader.read_slice(6);
-                                let data_length = reader.read_u8();
-                                let data = reader.read_slice(data_length as usize);
-                                let rssi = reader.read_u8() as i8;
+                        for _ in 0..num_of_reports {
+                            let event_type = reader.read_u8();
+                            let address_type = reader.read_u8();
+                            let address = reader.read_slice(6);
+                            let data_length = reader.read_u8();
+                            let data = reader.read_slice(data_length as usize);
+                            let rssi = reader.read_u8() as i8;
 
-                                log::info!("event_type: {}", event_type);
-                                log::info!("address_type: {}", address_type);
-                                log::info!(
-                                    "address: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                                    address[0],
-                                    address[1],
-                                    address[2],
-                                    address[3],
-                                    address[4],
-                                    address[5],
-                                );
-                                log::info!("data_length: {}", data_length);
-                                log::info!("data: {:?}", data);
-                                log::info!("rss: {}", rssi);
-                            }
+                            log::info!("event_type: {}", event_type);
+                            log::info!("address_type: {}", address_type);
+                            log::info!(
+                                "address: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+                                address[0],
+                                address[1],
+                                address[2],
+                                address[3],
+                                address[4],
+                                address[5],
+                            );
+                            log::info!("data_length: {}", data_length);
+                            log::info!("data: {:?}", data);
+                            log::info!("rss: {}", rssi);
                         }
-                    },
-                    _ => log::warn!("unexpected packet: {:?}", packet),
+                    }
+                    event => log::warn!("{:?}", event),
                 },
-                Err(err) => log::warn!("{:?}", err),
             },
             Err(err) => log::warn!("{:?}", err),
         };

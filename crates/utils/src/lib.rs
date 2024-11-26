@@ -53,4 +53,8 @@ impl<'p> Reader<'p> {
         self.pos += len;
         slice
     }
+
+    pub fn remaining(&self) -> usize {
+        self.buf.len() - self.pos
+    }
 }
