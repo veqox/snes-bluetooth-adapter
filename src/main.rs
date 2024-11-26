@@ -2,7 +2,7 @@
 #![no_main]
 
 use ble::{
-    packet::{HCIEventCode, HCIPacket},
+    packet::{HCICommand, HCIEventCode, HCIPacket, ScanEnableCommand, SetScanParametersCommand},
     Ble,
 };
 use esp_backtrace as _;
@@ -35,9 +35,20 @@ fn main() -> ! {
 
     let mut connector = BleConnector::new(&init, peripherals.BT);
     let mut ble = Ble::new(&mut connector);
-    ble.set_le_scan_parameters()
-        .expect("hci failed to set scan parameters");
-    ble.set_le_scan_enable().expect("hci failed to enable scan");
+    ble.write(HCICommand::Reset).expect("hci failed to reset");
+    ble.write(HCICommand::SetScanParameters(SetScanParametersCommand {
+        scan_type: 0x01,
+        scan_interval: 0x10,
+        scan_window: 0x10,
+        own_address_type: 0x00,
+        scanning_filter_policy: 0x00,
+    }))
+    .expect("hci failed to set scan parameters");
+    ble.write(HCICommand::ScanEnable(ScanEnableCommand {
+        scan_enable: 0x01,
+        filter_duplicates: 0x01,
+    }))
+    .expect("hci failed to enable scan");
 
     loop {
         let mut buf = [0; MAX_BLE_PACKET_SIZE];

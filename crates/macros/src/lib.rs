@@ -1,6 +1,8 @@
+#![no_std]
+
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{parse_macro_input, Data, DeriveInput, Variant};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, Variant};
 
 #[proc_macro_derive(FromU8)]
 pub fn from_u8(input: TokenStream) -> TokenStream {
@@ -55,4 +57,36 @@ pub fn into_u8(input: TokenStream) -> TokenStream {
     };
 
     TokenStream::from(expanded)
+}
+
+#[proc_macro_derive(Size)]
+pub fn size(input: TokenStream) -> TokenStream {
+    let ast = parse_macro_input!(input as DeriveInput);
+
+    let name = &ast.ident;
+    let fields = match &ast.data {
+        Data::Struct(s) => &s.fields,
+        _ => unimplemented!("Only works for structs"),
+    };
+
+    let size = match &fields {
+        Fields::Named(fields) => fields.named.iter().fold(quote! { 0 }, |size, field| {
+            let ty = &field.ty;
+            quote! { #size + core::mem::size_of::<#ty>() }
+        }),
+        Fields::Unnamed(fields) => fields.unnamed.iter().fold(quote! { 0 }, |size, field| {
+            let ty = &field.ty;
+            quote! { #size + core::mem::size_of::<#ty>() }
+        }),
+
+        Fields::Unit => quote! { 0 },
+    };
+
+    TokenStream::from(quote! {
+        impl #name {
+            pub const fn size(&self) -> usize {
+                #size
+            }
+        }
+    })
 }

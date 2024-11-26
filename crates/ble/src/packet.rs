@@ -1,10 +1,10 @@
 use core::{fmt::Display, u16};
 
-use macros::{FromU8, IntoU8};
+use macros::{FromU8, IntoU8, Size};
 use utils::{Reader, Writer};
 
 const HCI_COMMAND_HEADER_SIZE: usize = 3;
-const HCI_COMMAND_MAX_PACKET_SIZE: usize = 255 + HCI_COMMAND_HEADER_SIZE;
+pub(super) const HCI_COMMAND_MAX_PACKET_SIZE: usize = 255 + HCI_COMMAND_HEADER_SIZE;
 
 const HCI_EVENT_HEADER_SIZE: usize = 2;
 const HCI_EVENT_MAX_PACKET_SIZE: usize = 255 + HCI_EVENT_HEADER_SIZE;
@@ -130,12 +130,62 @@ pub const HCI_READ_LOCAL_SUPPORTED_COMMANDS_COMMAND: u16 =
     OCF_READ_LOCAL_SUPPORTED_COMMANDS | OGF_INFORMATIONAL_PARAMETERS_COMMAND << 10;
 
 #[derive(Debug)]
-pub enum HCIOpcode {}
-
-#[derive(Debug)]
 pub struct HCICommandPacket<'p> {
     pub opcode: u16,
     pub parameters: &'p [u8],
+}
+
+#[derive(Debug)]
+pub enum HCICommand {
+    Reset,                                       // 7.3.2 Reset command
+    SetScanParameters(SetScanParametersCommand), // 7.8.10 LE Set Scan Paramaters command
+    ScanEnable(ScanEnableCommand),               // 7.8.11 LE Set Scan Enable command
+}
+
+impl HCICommand {
+    pub fn write_to_buffer(self, buf: &mut [u8]) -> usize {
+        let mut writer = Writer::new(buf);
+        writer.write_u8(HCI_COMMAND_PACKET_TYPE);
+        match self {
+            Self::Reset => {
+                writer.write_u16(HCI_RESET_COMMAND);
+                writer.write_u8(0);
+            }
+            Self::ScanEnable(command) => {
+                writer.write_u16(HCI_SET_SCAN_ENABLE_COMMAND);
+                writer.write_u8(command.size() as u8);
+                writer.write_u8(command.scan_enable);
+                writer.write_u8(command.filter_duplicates);
+            }
+            Self::SetScanParameters(command) => {
+                writer.write_u16(HCI_SET_SCAN_PARAMETERS_COMMAND);
+                writer.write_u8(command.size() as u8);
+                writer.write_u8(command.scan_type);
+                writer.write_u16(command.scan_interval);
+                writer.write_u16(command.scan_window);
+                writer.write_u8(command.own_address_type);
+                writer.write_u8(command.scanning_filter_policy);
+            }
+        }
+        writer.pos
+    }
+}
+
+// 7.8.10 LE Set Scan Paramaters command
+#[derive(Debug, Size)]
+pub struct SetScanParametersCommand {
+    pub scan_type: u8,
+    pub scan_interval: u16,
+    pub scan_window: u16,
+    pub own_address_type: u8,
+    pub scanning_filter_policy: u8,
+}
+
+// 7.8.11 LE Set Scan Enable command
+#[derive(Debug, Size)]
+pub struct ScanEnableCommand {
+    pub scan_enable: u8,
+    pub filter_duplicates: u8,
 }
 
 impl<'p> Into<HCIPacket<'p>> for HCICommandPacket<'p> {
