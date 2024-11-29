@@ -1,5 +1,6 @@
 #![no_std]
 
+#[derive(Debug)]
 pub struct Writer<'p> {
     buf: &'p mut [u8],
     pub pos: usize,
@@ -26,8 +27,9 @@ impl<'p> Writer<'p> {
     }
 }
 
+#[derive(Debug)]
 pub struct Reader<'p> {
-    buf: &'p [u8],
+    pub buf: &'p [u8],
     pub pos: usize,
 }
 
@@ -52,6 +54,10 @@ impl<'p> Reader<'p> {
         let slice = &self.buf[self.pos..(self.pos + len)];
         self.pos += len;
         slice
+    }
+
+    pub fn seek(&mut self, pos: usize) {
+        self.pos = pos
     }
 
     pub fn remaining(&self) -> usize {

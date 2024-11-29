@@ -2,15 +2,14 @@
 #![no_main]
 
 use ble::{
-    hci::{HCICommand, HCIEvent, LEMetaEvent, ScanEnableCommand, SetScanParametersCommand},
+    hci::{
+        HCICommand, HCIEvent, HCIPacket, LEMetaEvent, ScanEnableCommand, SetScanParametersCommand,
+    },
     Ble,
 };
 use esp_backtrace as _;
 use esp_hal::{prelude::*, timer::timg::TimerGroup};
 use esp_wifi::ble::controller::BleConnector;
-use utils::Reader;
-
-const MAX_BLE_PACKET_SIZE: usize = 255;
 
 #[entry]
 fn main() -> ! {
@@ -35,6 +34,7 @@ fn main() -> ! {
 
     let mut connector = BleConnector::new(&init, peripherals.BT);
     let mut ble = Ble::new(&mut connector);
+
     ble.write(HCICommand::Reset).expect("hci failed to reset");
     ble.write(HCICommand::SetScanParameters(SetScanParametersCommand {
         scan_type: 0x01,
@@ -50,54 +50,24 @@ fn main() -> ! {
     }))
     .expect("hci failed to enable scan");
 
-    loop {
-        let mut buf = [0; MAX_BLE_PACKET_SIZE];
-
-        match ble.read(&mut buf) {
-            Ok(0) => continue,
-            Ok(len) => match HCIEvent::read_from(&buf[0..len]) {
+    for packet in ble.read() {
+        match packet {
+            HCIPacket::Event(event) => match HCIEvent::from_packet(&event) {
                 HCIEvent::CommandComplete(event) => {
-                    log::info!("hci: command complete");
-                    log::info!("num_hci_command_packets: {}", event.num_hci_command_packets);
-                    log::info!("command_opcode: {}", event.command_opcode);
-                    log::info!("return_parameters: {:?}", event.return_parameters);
+                    log::info!("{:?}", event);
                 }
                 HCIEvent::LEMetaEvent(event) => match event {
                     LEMetaEvent::AdvertisingReport(event) => {
-                        let mut reader = Reader::new(event.data);
-                        let num_of_reports = reader.read_u8();
-
-                        log::info!("hci: LE advertising report");
-                        log::info!("num_of_reports: {}", num_of_reports);
-
-                        for _ in 0..num_of_reports {
-                            let event_type = reader.read_u8();
-                            let address_type = reader.read_u8();
-                            let address = reader.read_slice(6);
-                            let data_length = reader.read_u8();
-                            let data = reader.read_slice(data_length as usize);
-                            let rssi = reader.read_u8() as i8;
-
-                            log::info!("event_type: {}", event_type);
-                            log::info!("address_type: {}", address_type);
-                            log::info!(
-                                "address: {:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-                                address[0],
-                                address[1],
-                                address[2],
-                                address[3],
-                                address[4],
-                                address[5],
-                            );
-                            log::info!("data_length: {}", data_length);
-                            log::info!("data: {:?}", data);
-                            log::info!("rss: {}", rssi);
+                        for report in event.reports {
+                            log::info!("{:?}", report)
                         }
                     }
-                    event => log::warn!("{:?}", event),
+                    _ => unimplemented!(),
                 },
             },
-            Err(err) => log::warn!("{:?}", err),
-        };
+            _ => unimplemented!(),
+        }
     }
+
+    loop {}
 }

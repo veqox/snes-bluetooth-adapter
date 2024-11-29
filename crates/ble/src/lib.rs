@@ -1,11 +1,10 @@
 #![no_std]
-#![allow(dead_code)]
 
 pub mod hci;
 
-use embedded_io::{Read, Write};
+use embedded_io::Write;
 use esp_wifi::ble::controller::{BleConnector, BleConnectorError};
-use hci::{HCICommand, HCIEvent, HCI_COMMAND_MAX_PACKET_SIZE};
+use hci::{HCICommand, HCIPacket};
 
 pub struct Ble<'d> {
     connector: &'d mut BleConnector<'d>,
@@ -17,17 +16,37 @@ impl<'d> Ble<'d> {
     }
 
     pub fn write(&mut self, command: HCICommand) -> Result<usize, BleConnectorError> {
-        let mut buf = [0; HCI_COMMAND_MAX_PACKET_SIZE];
+        let mut buf = [0; 258];
         let len = command.write_into(&mut buf);
         self.connector.write(&buf[..len])
     }
 
-    pub fn read_event(&mut self, buf: &'d mut [u8]) -> HCIEvent<'_> {
-        let len = self.connector.read(buf).unwrap();
-        HCIEvent::read_from(&buf[..len as usize])
+    pub fn read(self) -> HCIPacketIterator<'d> {
+        HCIPacketIterator::new(self)
     }
+}
 
-    pub fn read(&mut self, buf: &mut [u8]) -> Result<usize, BleConnectorError> {
-        self.connector.read(buf)
+pub struct HCIPacketIterator<'d> {
+    ble: Ble<'d>,
+}
+
+impl<'d> HCIPacketIterator<'d> {
+    pub fn new(ble: Ble<'d>) -> Self {
+        Self { ble }
+    }
+}
+
+impl<'d> Iterator for HCIPacketIterator<'d> {
+    type Item = HCIPacket;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let mut buf = [0; 255];
+        loop {
+            match self.ble.connector.get_next(&mut buf) {
+                Err(err) => log::info!("{:?}", err),
+                Ok(0) => continue,
+                Ok(len) => return Some(HCIPacket::from_buf(&buf[..len])),
+            }
+        }
     }
 }
