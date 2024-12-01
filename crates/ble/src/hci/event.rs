@@ -129,7 +129,7 @@ pub struct AdvertisingReport<'p> {
     pub event_type: u8,
     pub address_type: u8,
     pub address: &'p [u8],
-    pub data: &'p [u8],
+    pub data: AdvertisingResponseDataIterator<'p>,
     pub rssi: i8,
 }
 
@@ -153,11 +153,110 @@ impl<'p> Iterator for AdvertisingReportIterator<'p> {
             address: self.reader.read_slice(6),
             data: {
                 let len = self.reader.read_u8() as usize;
-                self.reader.read_slice(len)
+                AdvertisingResponseDataIterator {
+                    reader: Reader::new(self.reader.read_slice(len)),
+                }
             },
             rssi: self.reader.read_u8() as i8,
         })
     }
+}
+
+#[derive(Debug)]
+pub struct AdvertisingResponseData<'p> {
+    pub data: AdvertisingData<'p>,
+}
+
+#[derive(Debug)]
+pub struct AdvertisingResponseDataIterator<'p> {
+    pub reader: Reader<'p>,
+}
+
+impl<'p> Iterator for AdvertisingResponseDataIterator<'p> {
+    type Item = AdvertisingResponseData<'p>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.reader.remaining() == 0 {
+            return None;
+        }
+
+        let len = self.reader.read_u8();
+        let ad_type = self.reader.read_u8().into();
+        let data = self.reader.read_slice(len as usize - size_of::<u8>());
+
+        match ad_type {
+            AdvertisingDataType::Flags => Some(AdvertisingResponseData {
+                data: AdvertisingData::Flags(data[0]),
+            }),
+            AdvertisingDataType::IncompleteListOf16BitServiceUUIDs => {
+                Some(AdvertisingResponseData {
+                    data: AdvertisingData::IncompleteListOf16BitServiceUUIDs(&data),
+                })
+            }
+            AdvertisingDataType::CompleteListOf16BitServiceUUIDs => Some(AdvertisingResponseData {
+                data: AdvertisingData::CompleteListOf16BitServiceUUIDs(&data),
+            }),
+            AdvertisingDataType::ShortenedLocalName => Some(AdvertisingResponseData {
+                data: AdvertisingData::ShortenedLocalName(core::str::from_utf8(data).unwrap()),
+            }),
+            AdvertisingDataType::CompleteLocalName => Some(AdvertisingResponseData {
+                data: AdvertisingData::CompleteLocalName(core::str::from_utf8(data).unwrap()),
+            }),
+            AdvertisingDataType::TxPowerLevel => Some(AdvertisingResponseData {
+                data: AdvertisingData::TxPowerLevel(data[0] as i8),
+            }),
+            AdvertisingDataType::ClassOfDevice => Some(AdvertisingResponseData {
+                data: AdvertisingData::ClassOfDevice(u32::from_le_bytes([
+                    data[0], data[1], data[2], data[3],
+                ])),
+            }),
+            AdvertisingDataType::PeripheralConnectionIntervalRange => {
+                Some(AdvertisingResponseData {
+                    data: AdvertisingData::PeripheralConnectionIntervalRange(data),
+                })
+            }
+            AdvertisingDataType::ServiceData => Some(AdvertisingResponseData {
+                data: AdvertisingData::ServiceData(data),
+            }),
+            AdvertisingDataType::Appearance => Some(AdvertisingResponseData {
+                data: AdvertisingData::Appearance(u16::from_le_bytes([data[0], data[1]])),
+            }),
+            AdvertisingDataType::ManufacturerSpecificData => Some(AdvertisingResponseData {
+                data: AdvertisingData::ManufacturerSpecificData(data),
+            }),
+        }
+    }
+}
+
+// Bluetooth Assigned Numbers | Section 2.3 | page 12
+#[derive(Debug, IntoU8, FromU8)]
+pub enum AdvertisingDataType {
+    Flags = 0x01,                             // Flags
+    IncompleteListOf16BitServiceUUIDs = 0x02, // Incomplete List of 16-bit Service UUIDs
+    CompleteListOf16BitServiceUUIDs = 0x03,   // Complete List of 16-bit Service UUIDs
+    ShortenedLocalName = 0x08,                // Shortened Local Name
+    CompleteLocalName = 0x09,                 // Complete Local Name
+    TxPowerLevel = 0x0A,                      // Tx Power Level
+    ClassOfDevice = 0x0D,                     // Class of Device
+    PeripheralConnectionIntervalRange = 0x12, // Peripheral Connection Interval Range
+    ServiceData = 0x16,                       // Service Data
+    Appearance = 0x19,                        // Appearance
+    ManufacturerSpecificData = 0xFF,          // Manufacturer Specific Data
+}
+
+#[derive(Debug)]
+pub enum AdvertisingData<'p> {
+    Flags(u8),
+    IncompleteListOf16BitServiceUUIDs(&'p [u8]),
+    CompleteListOf16BitServiceUUIDs(&'p [u8]),
+    ShortenedLocalName(&'p str),
+    CompleteLocalName(&'p str),
+    TxPowerLevel(i8),
+    ClassOfDevice(u32),
+    PeripheralConnectionIntervalRange(&'p [u8]),
+    ServiceData(&'p [u8]),
+    Appearance(u16),
+    ManufacturerSpecificData(&'p [u8]),
 }
 
 #[derive(Debug)]

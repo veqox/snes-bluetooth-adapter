@@ -59,7 +59,17 @@ fn main() -> ! {
                 HCIEvent::LEMetaEvent(event) => match event {
                     LEMetaEvent::AdvertisingReport(event) => {
                         for report in event.reports {
-                            log::info!("{:?}", report)
+                            for data in report.data {
+                                match data.data {
+                                    ble::hci::AdvertisingData::ShortenedLocalName(name) => {
+                                        log::info!("{:?}", name);
+                                    }
+                                    ble::hci::AdvertisingData::CompleteLocalName(name) => {
+                                        log::info!("{:?}", name);
+                                    }
+                                    _ => {}
+                                }
+                            }
                         }
                     }
                     _ => unimplemented!(),
