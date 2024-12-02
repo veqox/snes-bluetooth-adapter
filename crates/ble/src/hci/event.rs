@@ -11,14 +11,14 @@ use super::HCIEventPacket;
 const HCI_COMMAND_COMPLETE_EVENT_CODE: u8 = 0x0E;
 const HCI_LE_META_EVENT_CODE: u8 = 0x3E;
 
-#[derive(Debug, FromU8, IntoU8)]
+#[derive(Debug, IntoU8, FromU8)]
 #[repr(u8)]
 pub enum HCIEventCode {
     CommandComplete = 0x0E, // 7.7.14
     LEMetaEvent = 0x3E,     // 7.7.65
 }
 
-#[derive(Debug, FromU8, IntoU8)]
+#[derive(Debug, IntoU8, FromU8)]
 #[repr(u8)]
 pub enum SubeventCode {
     ConnectionComplete = 0x01,                        // 7.7.65.1
@@ -169,9 +169,9 @@ impl<'p> Iterator for AdvertisingDataIterator<'p> {
             return None;
         }
 
-        let len = self.reader.read_u8()?;
+        let len = self.reader.read_u8()? as usize;
         let ad_type = self.reader.read_u8()?.into();
-        let data = self.reader.read_slice(len as usize - size_of::<u8>())?;
+        let data = self.reader.read_slice(len - size_of::<u8>())?;
         let mut reader = Reader::new(data);
 
         match ad_type {
@@ -225,6 +225,9 @@ impl<'p> Iterator for AdvertisingDataIterator<'p> {
             AdvertisingDataType::Appearance => {
                 Some(AdvertisingData::Appearance(reader.read_u16()?))
             }
+            AdvertisingDataType::LEBluetoothDeviceAddress => {
+                Some(AdvertisingData::LEBluetoothDeviceAddress(data))
+            }
             AdvertisingDataType::ManufacturerSpecificData => {
                 Some(AdvertisingData::ManufacturerSpecificData(data))
             }
@@ -249,6 +252,7 @@ pub enum AdvertisingDataType {
     PeripheralConnectionIntervalRange = 0x12,  // Peripheral Connection Interval Range
     ServiceData = 0x16,                        // Service Data
     Appearance = 0x19,                         // Appearance
+    LEBluetoothDeviceAddress = 0x1B,           // LE Bluetooth Device Address
     ManufacturerSpecificData = 0xFF,           // Manufacturer Specific Data
 }
 
@@ -301,6 +305,8 @@ pub enum AdvertisingData<'p> {
     ServiceData(&'p [u8]),
     ///  Bluetooth Core Supplement Spec | Section 1.12 | page 18
     Appearance(u16),
+    /// Bluetooth Core Supplement Spec | Part A, Section 1.16 | Page 20
+    LEBluetoothDeviceAddress(&'p [u8]),
     /// Bluetooth Core Supplement Spec | Part A, Section 1.14 | Page 13
     ManufacturerSpecificData(&'p [u8]),
 }
