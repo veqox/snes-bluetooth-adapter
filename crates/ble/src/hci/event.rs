@@ -1,7 +1,8 @@
 use core::fmt::Debug;
+use core::slice::Windows;
 
 use macros::{FromU8, IntoU8};
-use utils::Reader;
+use utils::{ByteSliceAs, Reader};
 
 use super::HCIEventPacket;
 
@@ -80,28 +81,26 @@ pub enum HCIEvent<'p> {
 }
 
 impl<'p> HCIEvent<'p> {
-    pub fn from_packet(packet: &'p HCIEventPacket) -> HCIEvent<'p> {
+    pub fn from_packet(packet: &'p HCIEventPacket) -> Option<HCIEvent<'p>> {
         let mut reader = Reader::new(&packet.parameters);
 
-        match packet.evcode.into() {
+        Some(match packet.evcode.into() {
             HCIEventCode::CommandComplete => HCIEvent::CommandComplete(CommandCompleteEvent {
-                num_hci_command_packets: reader.read_u8(),
-                command_opcode: reader.read_u16(),
-                return_parameters: reader.read_slice(packet.len - reader.pos),
+                num_hci_command_packets: reader.read_u8()?,
+                command_opcode: reader.read_u16()?,
+                return_parameters: reader.read_slice(packet.len - reader.pos)?,
             }),
-            HCIEventCode::LEMetaEvent => HCIEvent::LEMetaEvent(match reader.read_u8().into() {
+            HCIEventCode::LEMetaEvent => HCIEvent::LEMetaEvent(match reader.read_u8()?.into() {
                 SubeventCode::AdvertisingReport => {
-                    LEMetaEvent::AdvertisingReport(AdvertisingReportEvent {
-                        reports: AdvertisingReportIterator {
-                            num_reports: reader.read_u8(),
-                            reader: Reader::new(reader.read_slice(packet.len - reader.pos)),
-                        },
+                    LEMetaEvent::AdvertisingReport(AdvertisingReportIterator {
+                        num_reports: reader.read_u8()?,
+                        reader: Reader::new(reader.read_slice(packet.len - reader.pos)?),
                     })
                 }
                 _ => unimplemented!(),
             }),
             _ => unimplemented!(),
-        }
+        })
     }
 }
 
@@ -114,22 +113,17 @@ pub struct CommandCompleteEvent<'p> {
 
 #[derive(Debug)]
 pub enum LEMetaEvent<'p> {
-    AdvertisingReport(AdvertisingReportEvent<'p>), // 7.7.65.2
-    ReadAllRemoteFeaturesComplete(ReadAllRemoteFeaturesCompleteEvent<'p>), // 7.7.65.38
+    AdvertisingReport(AdvertisingReportIterator<'p>), // 7.7.65.2
+    ReadAllRemoteFeaturesComplete(&'p [u8]),          // 7.7.65.38
 }
 
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.7.65.2 | page 2327
-#[derive(Debug)]
-pub struct AdvertisingReportEvent<'p> {
-    pub reports: AdvertisingReportIterator<'p>,
-}
-
 #[derive(Debug)]
 pub struct AdvertisingReport<'p> {
     pub event_type: u8,
     pub address_type: u8,
     pub address: &'p [u8],
-    pub data: AdvertisingResponseDataIterator<'p>,
+    pub data: AdvertisingDataIterator<'p>,
     pub rssi: i8,
 }
 
@@ -148,82 +142,92 @@ impl<'p> Iterator for AdvertisingReportIterator<'p> {
         }
 
         Some(AdvertisingReport {
-            event_type: self.reader.read_u8(),
-            address_type: self.reader.read_u8(),
-            address: self.reader.read_slice(6),
+            event_type: self.reader.read_u8()?,
+            address_type: self.reader.read_u8()?,
+            address: self.reader.read_slice(6)?,
             data: {
-                let len = self.reader.read_u8() as usize;
-                AdvertisingResponseDataIterator {
-                    reader: Reader::new(self.reader.read_slice(len)),
+                let len = self.reader.read_u8()? as usize;
+                AdvertisingDataIterator {
+                    reader: Reader::new(self.reader.read_slice(len)?),
                 }
             },
-            rssi: self.reader.read_u8() as i8,
+            rssi: self.reader.read_u8()? as i8,
         })
     }
 }
 
 #[derive(Debug)]
-pub struct AdvertisingResponseData<'p> {
-    pub data: AdvertisingData<'p>,
-}
-
-#[derive(Debug)]
-pub struct AdvertisingResponseDataIterator<'p> {
+pub struct AdvertisingDataIterator<'p> {
     pub reader: Reader<'p>,
 }
 
-impl<'p> Iterator for AdvertisingResponseDataIterator<'p> {
-    type Item = AdvertisingResponseData<'p>;
+impl<'p> Iterator for AdvertisingDataIterator<'p> {
+    type Item = AdvertisingData<'p>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.reader.remaining() == 0 {
             return None;
         }
 
-        let len = self.reader.read_u8();
-        let ad_type = self.reader.read_u8().into();
-        let data = self.reader.read_slice(len as usize - size_of::<u8>());
+        let len = self.reader.read_u8()?;
+        let ad_type = self.reader.read_u8()?.into();
+        let data = self.reader.read_slice(len as usize - size_of::<u8>())?;
+        let mut reader = Reader::new(data);
 
         match ad_type {
-            AdvertisingDataType::Flags => Some(AdvertisingResponseData {
-                data: AdvertisingData::Flags(data[0]),
-            }),
+            AdvertisingDataType::Flags => Some(AdvertisingData::Flags(data[0])),
             AdvertisingDataType::IncompleteListOf16BitServiceUUIDs => {
-                Some(AdvertisingResponseData {
-                    data: AdvertisingData::IncompleteListOf16BitServiceUUIDs(&data),
-                })
+                Some(AdvertisingData::IncompleteListOf16BitServiceUUIDs({
+                    unsafe { data.as_u16_slice()? }
+                }))
             }
-            AdvertisingDataType::CompleteListOf16BitServiceUUIDs => Some(AdvertisingResponseData {
-                data: AdvertisingData::CompleteListOf16BitServiceUUIDs(&data),
-            }),
-            AdvertisingDataType::ShortenedLocalName => Some(AdvertisingResponseData {
-                data: AdvertisingData::ShortenedLocalName(core::str::from_utf8(data).unwrap()),
-            }),
-            AdvertisingDataType::CompleteLocalName => Some(AdvertisingResponseData {
-                data: AdvertisingData::CompleteLocalName(core::str::from_utf8(data).unwrap()),
-            }),
-            AdvertisingDataType::TxPowerLevel => Some(AdvertisingResponseData {
-                data: AdvertisingData::TxPowerLevel(data[0] as i8),
-            }),
-            AdvertisingDataType::ClassOfDevice => Some(AdvertisingResponseData {
-                data: AdvertisingData::ClassOfDevice(u32::from_le_bytes([
-                    data[0], data[1], data[2], data[3],
-                ])),
-            }),
+            AdvertisingDataType::CompleteListOf16BitServiceUUIDs => {
+                Some(AdvertisingData::CompleteListOf16BitServiceUUIDs({
+                    unsafe { data.as_u16_slice()? }
+                }))
+            }
+            AdvertisingDataType::IncompleteListOf32BitServiceUUIDs => {
+                Some(AdvertisingData::IncompleteListOf32BitServiceUUIDs({
+                    unsafe { data.as_u32_slice()? }
+                }))
+            }
+            AdvertisingDataType::CompleteListOf32BitServiceUUIDs => {
+                Some(AdvertisingData::CompleteListOf32BitServiceUUIDs({
+                    unsafe { data.as_u32_slice()? }
+                }))
+            }
+            AdvertisingDataType::IncompleteListOf128BitServiceUUIDs => {
+                Some(AdvertisingData::IncompleteListOf128BitServiceUUIDs({
+                    unsafe { data.as_u128_slice()? }
+                }))
+            }
+            AdvertisingDataType::CompleteListOf128BitServiceUUIDs => {
+                Some(AdvertisingData::CompleteListOf128BitServiceUUIDs({
+                    unsafe { data.as_u128_slice()? }
+                }))
+            }
+            AdvertisingDataType::ShortenedLocalName => Some(AdvertisingData::ShortenedLocalName(
+                core::str::from_utf8(data).ok()?,
+            )),
+            AdvertisingDataType::CompleteLocalName => Some(AdvertisingData::CompleteLocalName(
+                core::str::from_utf8(data).ok()?,
+            )),
+            AdvertisingDataType::TxPowerLevel => {
+                Some(AdvertisingData::TxPowerLevel(reader.read_u8()? as i8))
+            }
+            AdvertisingDataType::ClassOfDevice => {
+                Some(AdvertisingData::ClassOfDevice(reader.read_u32()?))
+            }
             AdvertisingDataType::PeripheralConnectionIntervalRange => {
-                Some(AdvertisingResponseData {
-                    data: AdvertisingData::PeripheralConnectionIntervalRange(data),
-                })
+                Some(AdvertisingData::PeripheralConnectionIntervalRange(data))
             }
-            AdvertisingDataType::ServiceData => Some(AdvertisingResponseData {
-                data: AdvertisingData::ServiceData(data),
-            }),
-            AdvertisingDataType::Appearance => Some(AdvertisingResponseData {
-                data: AdvertisingData::Appearance(u16::from_le_bytes([data[0], data[1]])),
-            }),
-            AdvertisingDataType::ManufacturerSpecificData => Some(AdvertisingResponseData {
-                data: AdvertisingData::ManufacturerSpecificData(data),
-            }),
+            AdvertisingDataType::ServiceData => Some(AdvertisingData::ServiceData(data)),
+            AdvertisingDataType::Appearance => {
+                Some(AdvertisingData::Appearance(reader.read_u16()?))
+            }
+            AdvertisingDataType::ManufacturerSpecificData => {
+                Some(AdvertisingData::ManufacturerSpecificData(data))
+            }
         }
     }
 }
@@ -231,35 +235,72 @@ impl<'p> Iterator for AdvertisingResponseDataIterator<'p> {
 // Bluetooth Assigned Numbers | Section 2.3 | page 12
 #[derive(Debug, IntoU8, FromU8)]
 pub enum AdvertisingDataType {
-    Flags = 0x01,                             // Flags
-    IncompleteListOf16BitServiceUUIDs = 0x02, // Incomplete List of 16-bit Service UUIDs
-    CompleteListOf16BitServiceUUIDs = 0x03,   // Complete List of 16-bit Service UUIDs
-    ShortenedLocalName = 0x08,                // Shortened Local Name
-    CompleteLocalName = 0x09,                 // Complete Local Name
-    TxPowerLevel = 0x0A,                      // Tx Power Level
-    ClassOfDevice = 0x0D,                     // Class of Device
-    PeripheralConnectionIntervalRange = 0x12, // Peripheral Connection Interval Range
-    ServiceData = 0x16,                       // Service Data
-    Appearance = 0x19,                        // Appearance
-    ManufacturerSpecificData = 0xFF,          // Manufacturer Specific Data
+    Flags = 0x01,                              // Flags
+    IncompleteListOf16BitServiceUUIDs = 0x02,  // Incomplete List of 16-bit Service UUIDs
+    CompleteListOf16BitServiceUUIDs = 0x03,    // Complete List of 16-bit Service UUIDs
+    IncompleteListOf32BitServiceUUIDs = 0x04,  // Incomplete List of 32-bit Service UUIDs
+    CompleteListOf32BitServiceUUIDs = 0x05,    // Complete List of 32-bit Service UUIDs
+    IncompleteListOf128BitServiceUUIDs = 0x06, // Incomplete List of 128-bit Service UUIDs
+    CompleteListOf128BitServiceUUIDs = 0x07,   // Complete List of 128-bit Service UUIDs
+    ShortenedLocalName = 0x08,                 // Shortened Local Name
+    CompleteLocalName = 0x09,                  // Complete Local Name
+    TxPowerLevel = 0x0A,                       // Tx Power Level
+    ClassOfDevice = 0x0D,                      // Class of Device
+    PeripheralConnectionIntervalRange = 0x12,  // Peripheral Connection Interval Range
+    ServiceData = 0x16,                        // Service Data
+    Appearance = 0x19,                         // Appearance
+    ManufacturerSpecificData = 0xFF,           // Manufacturer Specific Data
 }
 
+// Bluetooth Core Supplement spec | Part A, Section 1 | page 9
 #[derive(Debug)]
 pub enum AdvertisingData<'p> {
+    /// Bluetooth Core Supplement Spec | Part A, Section 1.3 | page 12
+    ///
+    /// | Bit  | Description |
+    /// | ---- | ----------- |
+    /// | 0    | LE Limited Discoverable Mode |
+    /// | 1    | LE General Discoverable Mode |
+    /// | 2    | BR/EDR Not Supported |
+    /// | 3    | Simultaneous LE and BR/EDR to Same Device Capable (Controller) |
+    /// | 4    | Simultaneous LE and BR/EDR to Same Device Capable (Host) |
+    /// | 5..7 | Reserved for future use |
     Flags(u8),
-    IncompleteListOf16BitServiceUUIDs(&'p [u8]),
-    CompleteListOf16BitServiceUUIDs(&'p [u8]),
-    ShortenedLocalName(&'p str),
-    CompleteLocalName(&'p str),
-    TxPowerLevel(i8),
-    ClassOfDevice(u32),
-    PeripheralConnectionIntervalRange(&'p [u8]),
-    ServiceData(&'p [u8]),
-    Appearance(u16),
-    ManufacturerSpecificData(&'p [u8]),
-}
 
-#[derive(Debug)]
-pub struct ReadAllRemoteFeaturesCompleteEvent<'p> {
-    pub data: &'p [u8],
+    /// Bluetooth Core Supplement Spec | Part A, Section 1.1 | Page 10
+    IncompleteListOf16BitServiceUUIDs(&'p [u16]),
+    /// Bluetooth Core Supplement Spec | Part A, Section 1.1 | Page 10
+    CompleteListOf16BitServiceUUIDs(&'p [u16]),
+    /// Bluetooth Core Supplement Spec | Part A, Section 1.1 | Page 10
+    IncompleteListOf32BitServiceUUIDs(&'p [u32]),
+    /// Bluetooth Core Supplement Spec | Part A, Section 1.1 | Page 10
+    CompleteListOf32BitServiceUUIDs(&'p [u32]),
+    /// Bluetooth Core Supplement Spec | Part A, Section 1.1 | Page 10
+    IncompleteListOf128BitServiceUUIDs(&'p [u128]),
+    /// Bluetooth Core Supplement Spec | Part A, Section 1.1 | Page 10
+    CompleteListOf128BitServiceUUIDs(&'p [u128]),
+    /// Bluetooth Core Supplement Spec | Part A, Section 1.2 | Page 11
+    ///
+    /// Bluetooth Core Spec | [Vol 4] Part E, Section 6.23 | Page 1891
+    ///
+    /// A UTF-8 encoded User Friendly Descriptive Name for the device with type utf8{248}.
+    ShortenedLocalName(&'p str),
+    /// Bluetooth Core Supplement Spec | Part A, Section 1.2 | Page 11
+    ///
+    /// Bluetooth Core Spec | [Vol 4] Part E, Section 6.23 | Page 1891
+    ///
+    /// A UTF-8 encoded User Friendly Descriptive Name for the device with type utf8{248}.
+    CompleteLocalName(&'p str),
+    /// Bluetooth Core Supplement Spec | Part A, Section 1.5 | Page 13
+    TxPowerLevel(i8),
+    /// Bluetooth Assigned Numbers | Section 2.8 | page 45
+    ClassOfDevice(u32),
+    /// Bluetooth Core Supplement Spec | Part A, Section 1.9 | Page 16
+    PeripheralConnectionIntervalRange(&'p [u8]),
+    /// Bluetooth Core Supplement Spec | Part A, Section 1.11 | Page 18
+    ServiceData(&'p [u8]),
+    ///  Bluetooth Core Supplement Spec | Section 1.12 | page 18
+    Appearance(u16),
+    /// Bluetooth Core Supplement Spec | Part A, Section 1.14 | Page 13
+    ManufacturerSpecificData(&'p [u8]),
 }

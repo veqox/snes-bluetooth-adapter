@@ -45,7 +45,7 @@ impl<'d> Iterator for HCIPacketIterator<'d> {
             match self.ble.connector.get_next(&mut buf) {
                 Err(err) => log::info!("{:?}", err),
                 Ok(0) => continue,
-                Ok(len) => return Some(HCIPacket::from_buf(&buf[..len])),
+                Ok(len) => return Some(HCIPacket::from_buf(&buf[..len])?),
             }
         }
     }

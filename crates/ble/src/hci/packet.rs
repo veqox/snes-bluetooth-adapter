@@ -16,14 +16,15 @@ pub enum HCIPacket {
 }
 
 impl HCIPacket {
-    pub fn from_buf(buf: &[u8]) -> HCIPacket {
+    pub fn from_buf(buf: &[u8]) -> Option<HCIPacket> {
         let mut reader = Reader::new(buf);
-        let packet_type = reader.read_u8();
-        match packet_type {
+        let packet_type = reader.read_u8()?;
+
+        Some(match packet_type {
             HCI_COMMAND_PACKET_TYPE => {
-                let opcode = reader.read_u16();
-                let len = reader.read_u8() as usize;
-                let data = reader.read_slice(len);
+                let opcode = reader.read_u16()?;
+                let len = reader.read_u8()? as usize;
+                let data = reader.read_slice(len)?;
 
                 HCIPacket::Command(HCICommandPacket::new(opcode, len, data))
             }
@@ -32,15 +33,15 @@ impl HCIPacket {
                 unimplemented!("Synchonous data packet type not implemented yet")
             }
             HCI_EVENT_PACKET_TYPE => {
-                let evcode = reader.read_u8();
-                let len = reader.read_u8() as usize;
-                let data = reader.read_slice(len);
+                let evcode = reader.read_u8()?;
+                let len = reader.read_u8()? as usize;
+                let data = reader.read_slice(len)?;
 
                 HCIPacket::Event(HCIEventPacket::new(evcode, len, data))
             }
             HCI_ISO_DATA_PACKET_TYPE => unimplemented!("ISO data packet type not implemented yet"),
             _ => panic!("Unknown HCI packet type: {}", packet_type),
-        }
+        })
     }
 }
 
