@@ -1,10 +1,12 @@
 use core::fmt::Debug;
-use core::slice::Windows;
 
 use macros::{FromU8, IntoU8};
-use utils::{ByteSliceAs, Reader};
+use utils::{Reader, SliceAs};
 
-use super::HCIEventPacket;
+use super::{
+    gap::{AdvertisingData, AdvertisingDataType},
+    HCIEventPacket,
+};
 
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.7 | page 2240
 // Events
@@ -233,80 +235,4 @@ impl<'p> Iterator for AdvertisingDataIterator<'p> {
             }
         }
     }
-}
-
-// Bluetooth Assigned Numbers | Section 2.3 | page 12
-#[derive(Debug, IntoU8, FromU8)]
-pub enum AdvertisingDataType {
-    Flags = 0x01,                              // Flags
-    IncompleteListOf16BitServiceUUIDs = 0x02,  // Incomplete List of 16-bit Service UUIDs
-    CompleteListOf16BitServiceUUIDs = 0x03,    // Complete List of 16-bit Service UUIDs
-    IncompleteListOf32BitServiceUUIDs = 0x04,  // Incomplete List of 32-bit Service UUIDs
-    CompleteListOf32BitServiceUUIDs = 0x05,    // Complete List of 32-bit Service UUIDs
-    IncompleteListOf128BitServiceUUIDs = 0x06, // Incomplete List of 128-bit Service UUIDs
-    CompleteListOf128BitServiceUUIDs = 0x07,   // Complete List of 128-bit Service UUIDs
-    ShortenedLocalName = 0x08,                 // Shortened Local Name
-    CompleteLocalName = 0x09,                  // Complete Local Name
-    TxPowerLevel = 0x0A,                       // Tx Power Level
-    ClassOfDevice = 0x0D,                      // Class of Device
-    PeripheralConnectionIntervalRange = 0x12,  // Peripheral Connection Interval Range
-    ServiceData = 0x16,                        // Service Data
-    Appearance = 0x19,                         // Appearance
-    LEBluetoothDeviceAddress = 0x1B,           // LE Bluetooth Device Address
-    ManufacturerSpecificData = 0xFF,           // Manufacturer Specific Data
-}
-
-// Bluetooth Core Supplement spec | Part A, Section 1 | page 9
-#[derive(Debug)]
-pub enum AdvertisingData<'p> {
-    /// Bluetooth Core Supplement Spec | Part A, Section 1.3 | page 12
-    ///
-    /// | Bit  | Description |
-    /// | ---- | ----------- |
-    /// | 0    | LE Limited Discoverable Mode |
-    /// | 1    | LE General Discoverable Mode |
-    /// | 2    | BR/EDR Not Supported |
-    /// | 3    | Simultaneous LE and BR/EDR to Same Device Capable (Controller) |
-    /// | 4    | Simultaneous LE and BR/EDR to Same Device Capable (Host) |
-    /// | 5..7 | Reserved for future use |
-    Flags(u8),
-
-    /// Bluetooth Core Supplement Spec | Part A, Section 1.1 | Page 10
-    IncompleteListOf16BitServiceUUIDs(&'p [u16]),
-    /// Bluetooth Core Supplement Spec | Part A, Section 1.1 | Page 10
-    CompleteListOf16BitServiceUUIDs(&'p [u16]),
-    /// Bluetooth Core Supplement Spec | Part A, Section 1.1 | Page 10
-    IncompleteListOf32BitServiceUUIDs(&'p [u32]),
-    /// Bluetooth Core Supplement Spec | Part A, Section 1.1 | Page 10
-    CompleteListOf32BitServiceUUIDs(&'p [u32]),
-    /// Bluetooth Core Supplement Spec | Part A, Section 1.1 | Page 10
-    IncompleteListOf128BitServiceUUIDs(&'p [u128]),
-    /// Bluetooth Core Supplement Spec | Part A, Section 1.1 | Page 10
-    CompleteListOf128BitServiceUUIDs(&'p [u128]),
-    /// Bluetooth Core Supplement Spec | Part A, Section 1.2 | Page 11
-    ///
-    /// Bluetooth Core Spec | [Vol 4] Part E, Section 6.23 | Page 1891
-    ///
-    /// A UTF-8 encoded User Friendly Descriptive Name for the device with type utf8{248}.
-    ShortenedLocalName(&'p str),
-    /// Bluetooth Core Supplement Spec | Part A, Section 1.2 | Page 11
-    ///
-    /// Bluetooth Core Spec | [Vol 4] Part E, Section 6.23 | Page 1891
-    ///
-    /// A UTF-8 encoded User Friendly Descriptive Name for the device with type utf8{248}.
-    CompleteLocalName(&'p str),
-    /// Bluetooth Core Supplement Spec | Part A, Section 1.5 | Page 13
-    TxPowerLevel(i8),
-    /// Bluetooth Assigned Numbers | Section 2.8 | page 45
-    ClassOfDevice(u32),
-    /// Bluetooth Core Supplement Spec | Part A, Section 1.9 | Page 16
-    PeripheralConnectionIntervalRange(&'p [u8]),
-    /// Bluetooth Core Supplement Spec | Part A, Section 1.11 | Page 18
-    ServiceData(&'p [u8]),
-    ///  Bluetooth Core Supplement Spec | Section 1.12 | page 18
-    Appearance(u16),
-    /// Bluetooth Core Supplement Spec | Part A, Section 1.16 | Page 20
-    LEBluetoothDeviceAddress(&'p [u8]),
-    /// Bluetooth Core Supplement Spec | Part A, Section 1.14 | Page 13
-    ManufacturerSpecificData(&'p [u8]),
 }

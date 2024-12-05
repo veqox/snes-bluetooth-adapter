@@ -17,7 +17,10 @@ impl<'d> Ble<'d> {
 
     pub fn write(&mut self, command: HCICommand) -> Result<usize, BleConnectorError> {
         let mut buf = [0; 258];
-        let len = command.write_into(&mut buf);
+        let len = command.write_into(&mut buf).ok_or_else(|| {
+            log::warn!("we got apeshit");
+            BleConnectorError::Unknown
+        })?;
         self.connector.write(&buf[..len])
     }
 

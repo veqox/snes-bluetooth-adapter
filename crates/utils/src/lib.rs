@@ -112,55 +112,43 @@ impl<'p> Reader<'p> {
     }
 }
 
-pub trait ByteSliceAs<'p> {
+pub trait SliceAs<'p> {
+    unsafe fn as_u8_slice(&self) -> Option<&'p [u8]>;
     unsafe fn as_u16_slice(&self) -> Option<&'p [u16]>;
     unsafe fn as_u32_slice(&self) -> Option<&'p [u32]>;
     unsafe fn as_u64_slice(&self) -> Option<&'p [u64]>;
     unsafe fn as_u128_slice(&self) -> Option<&'p [u128]>;
 }
 
-impl<'p> ByteSliceAs<'p> for &'p [u8] {
-    unsafe fn as_u16_slice(&self) -> Option<&'p [u16]> {
-        if self.len() % size_of::<u16>() != 0 {
-            return None;
-        }
+impl<'p, T> SliceAs<'p> for &'p [T] {
+    unsafe fn as_u8_slice(&self) -> Option<&'p [u8]> {
+        as_slice(self)
+    }
 
-        Some(core::slice::from_raw_parts(
-            self.as_ptr() as *const u16,
-            self.len() / size_of::<u16>(),
-        ))
+    unsafe fn as_u16_slice(&self) -> Option<&'p [u16]> {
+        as_slice(self)
     }
 
     unsafe fn as_u32_slice(&self) -> Option<&'p [u32]> {
-        if self.len() % size_of::<u32>() != 0 {
-            return None;
-        }
-
-        Some(core::slice::from_raw_parts(
-            self.as_ptr() as *const u32,
-            self.len() / size_of::<u32>(),
-        ))
+        as_slice(self)
     }
 
     unsafe fn as_u64_slice(&self) -> Option<&'p [u64]> {
-        if self.len() % size_of::<u64>() != 0 {
-            return None;
-        }
-
-        Some(core::slice::from_raw_parts(
-            self.as_ptr() as *const u64,
-            self.len() / size_of::<u64>(),
-        ))
+        as_slice(self)
     }
 
     unsafe fn as_u128_slice(&self) -> Option<&'p [u128]> {
-        if self.len() % size_of::<u128>() != 0 {
-            return None;
-        }
-
-        Some(core::slice::from_raw_parts(
-            self.as_ptr() as *const u128,
-            self.len() / size_of::<u128>(),
-        ))
+        as_slice(self)
     }
+}
+
+const unsafe fn as_slice<T, U>(slice: &[U]) -> Option<&[T]> {
+    if slice.len() % size_of::<T>() != 0 {
+        return None;
+    }
+
+    Some(core::slice::from_raw_parts(
+        slice.as_ptr() as *const T,
+        slice.len() / size_of::<T>(),
+    ))
 }
