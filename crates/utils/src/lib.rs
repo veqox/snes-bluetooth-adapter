@@ -101,7 +101,8 @@ impl<'p> Reader<'p> {
 
     pub fn seek(&mut self, pos: usize) {
         if pos > self.buf.len() {
-            panic!("position moved outside of the buffer")
+            // todo: should probably do some kind of error handling
+            return;
         }
 
         self.pos = pos

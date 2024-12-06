@@ -16,8 +16,9 @@ const HCI_LE_META_EVENT_CODE: u8 = 0x3E;
 #[derive(Debug, IntoU8, FromU8)]
 #[repr(u8)]
 pub enum HCIEventCode {
-    CommandComplete = 0x0E, // 7.7.14
-    LEMetaEvent = 0x3E,     // 7.7.65
+    DisconnectionComplete = 0x05, // 7.7.5
+    CommandComplete = 0x0E,       // 7.7.14
+    LEMetaEvent = 0x3E,           // 7.7.65
 }
 
 #[derive(Debug, IntoU8, FromU8)]
@@ -78,6 +79,7 @@ pub enum SubeventCode {
 
 #[derive(Debug)]
 pub enum HCIEvent<'p> {
+    DisconnectionComplete(DisconnectionCompleteEvent),
     CommandComplete(CommandCompleteEvent<'p>), // 7.7.14
     LEMetaEvent(LEMetaEvent<'p>),              // 7.7.65
 }
@@ -87,23 +89,66 @@ impl<'p> HCIEvent<'p> {
         let mut reader = Reader::new(&packet.parameters);
 
         Some(match packet.evcode.into() {
+            HCIEventCode::DisconnectionComplete => {
+                HCIEvent::DisconnectionComplete(DisconnectionCompleteEvent {
+                    status: reader.read_u8()?,
+                    connection_handle: reader.read_u16()?,
+                    reason: reader.read_u8()?,
+                })
+            }
             HCIEventCode::CommandComplete => HCIEvent::CommandComplete(CommandCompleteEvent {
                 num_hci_command_packets: reader.read_u8()?,
                 command_opcode: reader.read_u16()?,
                 return_parameters: reader.read_slice(packet.len - reader.pos)?,
             }),
             HCIEventCode::LEMetaEvent => HCIEvent::LEMetaEvent(match reader.read_u8()?.into() {
+                SubeventCode::ConnectionComplete => {
+                    LEMetaEvent::ConnectionComplete(ConnectionCompleteEvent {
+                        status: reader.read_u8()?,
+                        connection_handle: reader.read_u16()?,
+                        role: reader.read_u8()?,
+                        peer_address_type: reader.read_u8()?,
+                        peer_address: reader.read_slice(6)?,
+                        connection_interval: reader.read_u16()?,
+                        peripheral_latency: reader.read_u16()?,
+                        supervision_timeout: reader.read_u16()?,
+                        central_clock_accuracy: reader.read_u8()?,
+                    })
+                }
+
                 SubeventCode::AdvertisingReport => {
                     LEMetaEvent::AdvertisingReport(AdvertisingReportIterator {
                         num_reports: reader.read_u8()?,
                         reader: Reader::new(reader.read_slice(packet.len - reader.pos)?),
                     })
                 }
-                _ => unimplemented!(),
+                SubeventCode::ConnectionUpdateComplete => {
+                    LEMetaEvent::ConnectionUpdateComplete(ConnectionUpdateCompleteEvent {
+                        status: reader.read_u8()?,
+                        connection_handle: reader.read_u16()?,
+                        connection_interval: reader.read_u16()?,
+                        peripheral_latency: reader.read_u16()?,
+                        supervision_timeout: reader.read_u16()?,
+                    })
+                }
+                code => {
+                    log::warn!("{:?} is not implemented skipping", code);
+                    return None;
+                }
             }),
-            _ => unimplemented!(),
+            code => {
+                log::warn!("{:?} is not implemented skipping", code);
+                return None;
+            }
         })
     }
+}
+
+#[derive(Debug)]
+pub struct DisconnectionCompleteEvent {
+    status: u8,
+    connection_handle: u16,
+    reason: u8, // Bluetooth Core Spec 6.0 | [Vol 1] Part F | page 410
 }
 
 #[derive(Debug)]
@@ -115,8 +160,24 @@ pub struct CommandCompleteEvent<'p> {
 
 #[derive(Debug)]
 pub enum LEMetaEvent<'p> {
+    ConnectionComplete(ConnectionCompleteEvent<'p>), // 7.7.65.1
     AdvertisingReport(AdvertisingReportIterator<'p>), // 7.7.65.2
-    ReadAllRemoteFeaturesComplete(&'p [u8]),          // 7.7.65.38
+    ConnectionUpdateComplete(ConnectionUpdateCompleteEvent), // 7.7.65.3
+    ReadAllRemoteFeaturesComplete(&'p [u8]),         // 7.7.65.38
+}
+
+// Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.7.65.1 | page 2324
+#[derive(Debug)]
+pub struct ConnectionCompleteEvent<'p> {
+    status: u8,
+    connection_handle: u16,
+    role: u8,
+    peer_address_type: u8,
+    peer_address: &'p [u8],
+    connection_interval: u16,
+    peripheral_latency: u16,
+    supervision_timeout: u16,
+    central_clock_accuracy: u8,
 }
 
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.7.65.2 | page 2327
@@ -127,6 +188,16 @@ pub struct AdvertisingReport<'p> {
     pub address: &'p [u8],
     pub data: AdvertisingDataIterator<'p>,
     pub rssi: i8,
+}
+
+// Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.7.65.3 | page 2330
+#[derive(Debug)]
+pub struct ConnectionUpdateCompleteEvent {
+    status: u8,
+    connection_handle: u16,
+    connection_interval: u16,
+    peripheral_latency: u16,
+    supervision_timeout: u16,
 }
 
 #[derive(Debug)]
