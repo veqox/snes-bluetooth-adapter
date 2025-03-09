@@ -2,7 +2,7 @@ use core::result::Result;
 use macros::Size;
 use utils::{WriteError, Writer};
 
-use super::{gap::AdvertisingData, HCIPacket};
+use super::{HCIPacket, gap::AdvertisingData};
 
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.1 | page 1909
 // Link Control commands
@@ -55,7 +55,7 @@ const OCF_SET_SCAN_ENABLE: u16 = 0x0C; // 7.8.11
 // The OGF occupies the upper 6 bits of the Opcode, while the OCF occupies the remaining 10 bits. [...]
 
 const fn opcode(ocf: u16, ogf: u16) -> u16 {
-    ocf | ogf << 10
+    ocf | (ogf << 10)
 }
 
 #[derive(Debug)]
@@ -69,7 +69,7 @@ pub enum HCICommand<'p> {
     ScanEnable(ScanEnableCommand),                             // 7.8.11
 }
 
-impl<'p> HCICommand<'p> {
+impl HCICommand<'_> {
     pub fn write_into(&self, buf: &mut [u8]) -> Result<usize, WriteError> {
         let mut writer = Writer::new(buf);
         writer.write_u8(HCIPacket::COMMAND_PACKET_TYPE)?;

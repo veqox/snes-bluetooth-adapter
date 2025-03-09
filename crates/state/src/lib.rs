@@ -57,7 +57,7 @@ impl Display for State {
 }
 
 impl State {
-    pub fn next(&mut self) -> bool {
+    pub fn cycle_next(&mut self) -> bool {
         let cycle = self.cycle();
         self.set_cycle(cycle + 1);
 
@@ -81,51 +81,51 @@ impl State {
     }
 
     pub fn set_b(&mut self, value: bool) {
-        self.write_bit(value.into(), B_OFFSET);
+        self.write_bit(value, B_OFFSET);
     }
 
     pub fn set_y(&mut self, value: bool) {
-        self.write_bit(value.into(), Y_OFFSET);
+        self.write_bit(value, Y_OFFSET);
     }
 
     pub fn set_select(&mut self, value: bool) {
-        self.write_bit(value.into(), SELECT_OFFSET);
+        self.write_bit(value, SELECT_OFFSET);
     }
 
     pub fn set_start(&mut self, value: bool) {
-        self.write_bit(value.into(), START_OFFSET);
+        self.write_bit(value, START_OFFSET);
     }
 
     pub fn set_up(&mut self, value: bool) {
-        self.write_bit(value.into(), UP_OFFSET);
+        self.write_bit(value, UP_OFFSET);
     }
 
     pub fn set_down(&mut self, value: bool) {
-        self.write_bit(value.into(), DOWN_OFFSET);
+        self.write_bit(value, DOWN_OFFSET);
     }
 
     pub fn set_left(&mut self, value: bool) {
-        self.write_bit(value.into(), LEFT_OFFSET);
+        self.write_bit(value, LEFT_OFFSET);
     }
 
     pub fn set_right(&mut self, value: bool) {
-        self.write_bit(value.into(), RIGHT_OFFSET);
+        self.write_bit(value, RIGHT_OFFSET);
     }
 
     pub fn set_a(&mut self, value: bool) {
-        self.write_bit(value.into(), A_OFFSET);
+        self.write_bit(value, A_OFFSET);
     }
 
     pub fn set_x(&mut self, value: bool) {
-        self.write_bit(value.into(), X_OFFSET);
+        self.write_bit(value, X_OFFSET);
     }
 
     pub fn set_l(&mut self, value: bool) {
-        self.write_bit(value.into(), L_OFFSET);
+        self.write_bit(value, L_OFFSET);
     }
 
     pub fn set_r(&mut self, value: bool) {
-        self.write_bit(value.into(), R_OFFSET);
+        self.write_bit(value, R_OFFSET);
     }
 
     pub fn reset_cycle(&mut self) {
@@ -145,7 +145,7 @@ impl State {
 
     fn write(&mut self, value: u16, len: u16, offset: u16) {
         let mask = u16::MAX >> (u16::BITS as u16 - len);
-        let value = (value as u16) & mask;
+        let value = value & mask;
         self.value &= !(mask << offset);
         self.value |= value << offset;
     }

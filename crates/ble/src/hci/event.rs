@@ -4,8 +4,8 @@ use macros::{FromU8, IntoU8};
 use utils::Reader;
 
 use super::{
-    gap::{AdvertisingData, AdvertisingDataType},
     HCIEventPacket,
+    gap::{AdvertisingData, AdvertisingDataType},
 };
 
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.7 | page 2240
@@ -83,7 +83,7 @@ pub enum HCIEvent<'p> {
 
 impl<'p> HCIEvent<'p> {
     pub fn from_packet(packet: &'p HCIEventPacket) -> Option<HCIEvent<'p>> {
-        let mut reader = Reader::new(&packet.parameters);
+        let mut reader = Reader::new(packet.parameters);
 
         Some(match packet.evcode.into() {
             HCIEventCode::DisconnectionComplete => {

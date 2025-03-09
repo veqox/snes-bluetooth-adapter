@@ -96,7 +96,7 @@ impl<'p> HCIEventPacket<'p> {
     }
 }
 
-impl<'p> Debug for HCIEventPacket<'p> {
+impl Debug for HCIEventPacket<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct(type_name::<Self>())
             .field("evcode", &self.evcode)
@@ -133,7 +133,7 @@ impl<'p> HCICommandPacket<'p> {
     }
 }
 
-impl<'p> Debug for HCICommandPacket<'p> {
+impl Debug for HCICommandPacket<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct(type_name::<Self>())
             .field("opcode", &self.opcode)
@@ -181,14 +181,14 @@ impl<'p> HCIACLDataPacket<'p> {
     }
 }
 
-impl<'p> Debug for HCIACLDataPacket<'p> {
+impl Debug for HCIACLDataPacket<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct(type_name::<Self>())
             .field("handle", &self.handle)
             .field("packet_boundary_flag", &self.packet_boundary_flag)
             .field("broadcast_flag", &self.broadcast_flag)
             .field("len", &self.len)
-            .field("data", &&self.data[..self.len as usize])
+            .field("data", &&self.data[..self.len])
             .finish()
     }
 }

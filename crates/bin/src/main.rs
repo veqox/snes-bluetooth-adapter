@@ -116,7 +116,7 @@ impl<'d> Ble<'d> {
             match self.connector.next(buf) {
                 Err(err) => warn!("{:?}", err),
                 Ok(0) => continue,
-                Ok(len) => return Some(HCIPacket::from_buf(&buf[..len])?),
+                Ok(len) => return HCIPacket::from_buf(&buf[..len]),
             }
         }
     }
