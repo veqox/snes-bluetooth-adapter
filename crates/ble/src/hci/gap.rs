@@ -1,5 +1,5 @@
 use macros::{FromU8, IntoU8};
-use utils::{SliceAs, Writer};
+use utils::{WriteError, Writer};
 
 pub const AD_FLAG_LIMITED_DISCOVERABLE_MODE: u8 = 0b0000_0001;
 pub const AD_FLAG_GENERAL_DISCOVERABLE_MODE: u8 = 0b0000_0010;
@@ -84,91 +84,91 @@ pub enum AdvertisingData<'p> {
 }
 
 impl<'p> AdvertisingData<'p> {
-    pub fn write_into(&self, buf: &'p mut [u8]) -> Option<usize> {
+    pub fn write_into(&self, buf: &'p mut [u8]) -> Result<usize, WriteError> {
         let mut writer = Writer::new(buf);
         match *self {
             AdvertisingData::Flags(flags) => {
-                writer.write_u8((2 * size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::Flags as u8);
-                writer.write_u8(flags);
+                writer.write_u8((2 * size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::Flags as u8)?;
+                writer.write_u8(flags)?;
             }
             AdvertisingData::IncompleteListOf16BitServiceUUIDs(uuids) => {
-                writer.write_u8((uuids.len() * size_of::<u16>() + size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::IncompleteListOf16BitServiceUUIDs as u8);
-                writer.write_slice(unsafe { uuids.as_u8_slice()? });
+                writer.write_u8((uuids.len() * size_of::<u16>() + size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::IncompleteListOf16BitServiceUUIDs as u8)?;
+                writer.write_u16_slice(uuids)?;
             }
             AdvertisingData::CompleteListOf16BitServiceUUIDs(uuids) => {
-                writer.write_u8((uuids.len() * size_of::<u16>() + size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::CompleteListOf16BitServiceUUIDs as u8);
-                writer.write_slice(unsafe { uuids.as_u8_slice()? });
+                writer.write_u8((uuids.len() * size_of::<u16>() + size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::CompleteListOf16BitServiceUUIDs as u8)?;
+                writer.write_u16_slice(uuids)?;
             }
             AdvertisingData::IncompleteListOf32BitServiceUUIDs(uuids) => {
-                writer.write_u8((uuids.len() * size_of::<u32>() + size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::IncompleteListOf32BitServiceUUIDs as u8);
-                writer.write_slice(unsafe { uuids.as_u8_slice()? });
+                writer.write_u8((uuids.len() * size_of::<u32>() + size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::IncompleteListOf32BitServiceUUIDs as u8)?;
+                writer.write_u32_slice(uuids)?;
             }
             AdvertisingData::CompleteListOf32BitServiceUUIDs(uuids) => {
-                writer.write_u8((uuids.len() * size_of::<u32>() + size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::CompleteListOf32BitServiceUUIDs as u8);
-                writer.write_slice(unsafe { uuids.as_u8_slice()? });
+                writer.write_u8((uuids.len() * size_of::<u32>() + size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::CompleteListOf32BitServiceUUIDs as u8)?;
+                writer.write_u32_slice(uuids)?;
             }
             AdvertisingData::IncompleteListOf128BitServiceUUIDs(uuids) => {
-                writer.write_u8((uuids.len() * size_of::<u128>() + size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::IncompleteListOf128BitServiceUUIDs as u8);
-                writer.write_slice(unsafe { uuids.as_u8_slice()? });
+                writer.write_u8((uuids.len() * size_of::<u128>() + size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::IncompleteListOf128BitServiceUUIDs as u8)?;
+                writer.write_u128_slice(uuids)?;
             }
             AdvertisingData::CompleteListOf128BitServiceUUIDs(uuids) => {
-                writer.write_u8((uuids.len() * size_of::<u128>() + size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::CompleteListOf128BitServiceUUIDs as u8);
-                writer.write_slice(unsafe { uuids.as_u8_slice()? });
+                writer.write_u8((uuids.len() * size_of::<u128>() + size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::CompleteListOf128BitServiceUUIDs as u8)?;
+                writer.write_u128_slice(uuids)?;
             }
             AdvertisingData::ShortenedLocalName(name) => {
-                writer.write_u8((name.len() + size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::ShortenedLocalName as u8);
-                writer.write_slice(name.as_bytes());
+                writer.write_u8((name.len() + size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::ShortenedLocalName as u8)?;
+                writer.write_u8_slice(name.as_bytes())?;
             }
             AdvertisingData::CompleteLocalName(name) => {
-                writer.write_u8((name.len() + size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::CompleteLocalName as u8);
-                writer.write_slice(name.as_bytes());
+                writer.write_u8((name.len() + size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::CompleteLocalName as u8)?;
+                writer.write_u8_slice(name.as_bytes())?;
             }
             AdvertisingData::TxPowerLevel(level) => {
-                writer.write_u8((size_of::<i8>() + size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::TxPowerLevel as u8);
-                writer.write_u8(level as u8);
+                writer.write_u8((size_of::<i8>() + size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::TxPowerLevel as u8)?;
+                writer.write_u8(level as u8)?;
             }
             AdvertisingData::ClassOfDevice(class) => {
-                writer.write_u8((size_of::<u32>() + size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::ClassOfDevice as u8);
-                writer.write_u32(class);
+                writer.write_u8((size_of::<u32>() + size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::ClassOfDevice as u8)?;
+                writer.write_u32(class)?;
             }
             AdvertisingData::PeripheralConnectionIntervalRange(range) => {
-                writer.write_u8((range.len() + size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::PeripheralConnectionIntervalRange as u8);
-                writer.write_slice(range);
+                writer.write_u8((range.len() + size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::PeripheralConnectionIntervalRange as u8)?;
+                writer.write_u8_slice(range)?;
             }
             AdvertisingData::ServiceData(data) => {
-                writer.write_u8((data.len() + size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::PeripheralConnectionIntervalRange as u8);
-                writer.write_slice(data);
+                writer.write_u8((data.len() + size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::PeripheralConnectionIntervalRange as u8)?;
+                writer.write_u8_slice(data)?;
             }
             AdvertisingData::Appearance(appearance) => {
-                writer.write_u8((size_of::<u16>() + size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::PeripheralConnectionIntervalRange as u8);
-                writer.write_u16(appearance);
+                writer.write_u8((size_of::<u16>() + size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::PeripheralConnectionIntervalRange as u8)?;
+                writer.write_u16(appearance)?;
             }
             AdvertisingData::LEBluetoothDeviceAddress(address) => {
-                writer.write_u8((address.len() + size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::PeripheralConnectionIntervalRange as u8);
-                writer.write_slice(address);
+                writer.write_u8((address.len() + size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::PeripheralConnectionIntervalRange as u8)?;
+                writer.write_u8_slice(address)?;
             }
             AdvertisingData::ManufacturerSpecificData(data) => {
-                writer.write_u8((data.len() + size_of::<u8>()) as u8);
-                writer.write_u8(AdvertisingDataType::PeripheralConnectionIntervalRange as u8);
-                writer.write_slice(data);
+                writer.write_u8((data.len() + size_of::<u8>()) as u8)?;
+                writer.write_u8(AdvertisingDataType::PeripheralConnectionIntervalRange as u8)?;
+                writer.write_u8_slice(data)?;
             }
         };
 
-        Some(writer.pos)
+        Ok(writer.pos)
     }
 }

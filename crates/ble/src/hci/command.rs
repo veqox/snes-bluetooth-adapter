@@ -1,20 +1,17 @@
-use core::{
-    mem::offset_of,
-    ptr::{addr_of, write},
-    u16,
-};
-
+use core::result::Result;
 use macros::Size;
-use utils::{SliceAs, Writer};
+use utils::{WriteError, Writer};
 
-use super::{gap::AdvertisingData, AdvertisingDataType};
+use super::{gap::AdvertisingData, HCIPacket};
 
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.1 | page 1909
 // Link Control commands
+#[allow(unused)]
 const OGF_LINK_CONTROL_COMMAND: u16 = 0x01;
 
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.2 | page 2010
 // Link Policy commands
+#[allow(unused)]
 const OGF_LINK_POLICY_COMMAND: u16 = 0x02;
 
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.3 | page 2037
@@ -25,16 +22,20 @@ const OCF_RESET: u16 = 0x3; // 7.3.2
 
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.4 | page 2190
 // Informational parameters
+#[allow(unused)]
 const OGF_INFORMATIONAL_PARAMETERS_COMMAND: u16 = 0x04;
 
+#[allow(unused)]
 const OCF_READ_LOCAL_SUPPORTED_COMMANDS: u16 = 0x2; // 7.4.2
 
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.5 | page 2220
 // Status parameters
+#[allow(unused)]
 const OGF_STATUS_PARAMETERS_COMMAND: u16 = 0x05;
 
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.6 | page 2237
 // Testing commands
+#[allow(unused)]
 const OGF_TESTING_COMMAND: u16 = 0x06;
 
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.8 | page 2483
@@ -69,86 +70,86 @@ pub enum HCICommand<'p> {
 }
 
 impl<'p> HCICommand<'p> {
-    pub fn write_into(self, buf: &mut [u8]) -> Option<usize> {
+    pub fn write_into(&self, buf: &mut [u8]) -> Result<usize, WriteError> {
         let mut writer = Writer::new(buf);
-        writer.write_u8(super::packet::HCI_COMMAND_PACKET_TYPE);
+        writer.write_u8(HCIPacket::COMMAND_PACKET_TYPE)?;
 
         match self {
             Self::Reset => {
-                writer.write_u16(opcode(OCF_RESET, OGF_CONTROL_AND_BASEBAND_COMMAND));
-                writer.write_u8(0);
+                writer.write_u16(opcode(OCF_RESET, OGF_CONTROL_AND_BASEBAND_COMMAND))?;
+                writer.write_u8(0)?;
             }
             Self::SetAdvertisingParameters(command) => {
                 writer.write_u16(opcode(
                     OCF_SET_ADVERTISING_PARAMETERS,
                     OGF_LE_CONTROLLER_COMMAND,
-                ));
-                writer.write_u8(command.size() as u8);
-                writer.write_u16(command.interval_min);
-                writer.write_u16(command.interval_max);
-                writer.write_u8(command.advertising_type);
-                writer.write_u8(command.own_address_type);
-                writer.write_u8(command.peer_address_type);
-                writer.write_slice(&command.peer_address);
-                writer.write_u8(command.advertising_channel_map);
-                writer.write_u8(command.advertising_filter_policy);
+                ))?;
+                writer.write_u8(command.size() as u8)?;
+                writer.write_u16(command.interval_min)?;
+                writer.write_u16(command.interval_max)?;
+                writer.write_u8(command.advertising_type)?;
+                writer.write_u8(command.own_address_type)?;
+                writer.write_u8(command.peer_address_type)?;
+                writer.write_u8_slice(&command.peer_address)?;
+                writer.write_u8(command.advertising_channel_map)?;
+                writer.write_u8(command.advertising_filter_policy)?;
             }
             Self::ScanEnable(command) => {
-                writer.write_u16(opcode(OCF_SET_SCAN_ENABLE, OGF_LE_CONTROLLER_COMMAND));
-                writer.write_u8(command.size() as u8);
-                writer.write_u8(command.scan_enable);
-                writer.write_u8(command.filter_duplicates);
+                writer.write_u16(opcode(OCF_SET_SCAN_ENABLE, OGF_LE_CONTROLLER_COMMAND))?;
+                writer.write_u8(command.size() as u8)?;
+                writer.write_u8(command.scan_enable)?;
+                writer.write_u8(command.filter_duplicates)?;
             }
             Self::SetScanParameters(command) => {
-                writer.write_u16(opcode(OCF_SET_SCAN_PARAMETERS, OGF_LE_CONTROLLER_COMMAND));
-                writer.write_u8(command.size() as u8);
-                writer.write_u8(command.scan_type);
-                writer.write_u16(command.scan_interval);
-                writer.write_u16(command.scan_window);
-                writer.write_u8(command.own_address_type);
-                writer.write_u8(command.scanning_filter_policy);
+                writer.write_u16(opcode(OCF_SET_SCAN_PARAMETERS, OGF_LE_CONTROLLER_COMMAND))?;
+                writer.write_u8(command.size() as u8)?;
+                writer.write_u8(command.scan_type)?;
+                writer.write_u16(command.scan_interval)?;
+                writer.write_u16(command.scan_window)?;
+                writer.write_u8(command.own_address_type)?;
+                writer.write_u8(command.scanning_filter_policy)?;
             }
             Self::SetAdvertisingData { data } => {
-                writer.write_u16(opcode(OCF_SET_ADVERTISING_DATA, OGF_LE_CONTROLLER_COMMAND));
-                writer.write_u8(32);
-                let mut data_buf = [0; 31];
+                writer.write_u16(opcode(OCF_SET_ADVERTISING_DATA, OGF_LE_CONTROLLER_COMMAND))?;
+                writer.write_u8(32)?;
+                let mut buf = [0; 31];
 
                 let mut offset = 0;
 
-                for data in data.iter() {
-                    let len = data.write_into(&mut data_buf[offset..])?;
+                for ad in data.iter() {
+                    let len = ad.write_into(&mut buf[offset..])?;
                     offset += len;
                 }
 
-                writer.write_u8(offset as u8);
-                writer.write_slice(&data_buf);
+                writer.write_u8(offset as u8)?;
+                writer.write_u8_slice(&buf)?;
             }
             Self::SetScanResponseData { data } => {
-                writer.write_u16(opcode(OCF_SET_RESPONSE_DATA, OGF_LE_CONTROLLER_COMMAND));
-                writer.write_u8(32);
-                let mut data_buf = [0; 31];
+                writer.write_u16(opcode(OCF_SET_RESPONSE_DATA, OGF_LE_CONTROLLER_COMMAND))?;
+                writer.write_u8(32)?;
+                let mut buf = [0; 31];
 
                 let mut offset = 0;
 
-                for data in data.iter() {
-                    let len = data.write_into(&mut data_buf[offset..])?;
+                for ad in data.iter() {
+                    let len = ad.write_into(&mut buf[offset..])?;
                     offset += len;
                 }
 
-                writer.write_u8(offset as u8);
-                writer.write_slice(&data_buf);
+                writer.write_u8(offset as u8)?;
+                writer.write_u8_slice(&buf)?;
             }
             Self::SetAdvertisingEnable { enable } => {
                 writer.write_u16(opcode(
                     OCF_SET_ADVERTISING_ENABLE,
                     OGF_LE_CONTROLLER_COMMAND,
-                ));
-                writer.write_u8(size_of::<u8>() as u8);
-                writer.write_u8(enable);
+                ))?;
+                writer.write_u8(size_of::<u8>() as u8)?;
+                writer.write_u8(*enable)?;
             }
         }
 
-        Some(writer.pos)
+        Ok(writer.pos)
     }
 }
 

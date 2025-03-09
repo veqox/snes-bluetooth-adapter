@@ -1,7 +1,7 @@
 use core::fmt::Debug;
 
 use macros::{FromU8, IntoU8};
-use utils::{Reader, SliceAs};
+use utils::Reader;
 
 use super::{
     gap::{AdvertisingData, AdvertisingDataType},
@@ -10,9 +10,6 @@ use super::{
 
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.7 | page 2240
 // Events
-const HCI_COMMAND_COMPLETE_EVENT_CODE: u8 = 0x0E;
-const HCI_LE_META_EVENT_CODE: u8 = 0x3E;
-
 #[derive(Debug, IntoU8, FromU8)]
 #[repr(u8)]
 pub enum HCIEventCode {
@@ -79,9 +76,9 @@ pub enum SubeventCode {
 
 #[derive(Debug)]
 pub enum HCIEvent<'p> {
-    DisconnectionComplete(DisconnectionCompleteEvent),
-    CommandComplete(CommandCompleteEvent<'p>), // 7.7.14
-    LEMetaEvent(LEMetaEvent<'p>),              // 7.7.65
+    DisconnectionComplete(DisconnectionCompleteEvent), // 7.7.5
+    CommandComplete(CommandCompleteEvent<'p>),         // 7.7.14
+    LEMetaEvent(LEMetaEvent<'p>),                      // 7.7.65
 }
 
 impl<'p> HCIEvent<'p> {
@@ -99,7 +96,7 @@ impl<'p> HCIEvent<'p> {
             HCIEventCode::CommandComplete => HCIEvent::CommandComplete(CommandCompleteEvent {
                 num_hci_command_packets: reader.read_u8()?,
                 command_opcode: reader.read_u16()?,
-                return_parameters: reader.read_slice(packet.len - reader.pos)?,
+                return_parameters: reader.read_u8_slice(packet.len - reader.pos)?,
             }),
             HCIEventCode::LEMetaEvent => HCIEvent::LEMetaEvent(match reader.read_u8()?.into() {
                 SubeventCode::ConnectionComplete => {
@@ -108,7 +105,7 @@ impl<'p> HCIEvent<'p> {
                         connection_handle: reader.read_u16()?,
                         role: reader.read_u8()?,
                         peer_address_type: reader.read_u8()?,
-                        peer_address: reader.read_slice(6)?,
+                        peer_address: reader.read_u8_slice(6)?,
                         connection_interval: reader.read_u16()?,
                         peripheral_latency: reader.read_u16()?,
                         supervision_timeout: reader.read_u16()?,
@@ -119,7 +116,7 @@ impl<'p> HCIEvent<'p> {
                 SubeventCode::AdvertisingReport => {
                     LEMetaEvent::AdvertisingReport(AdvertisingReportIterator {
                         num_reports: reader.read_u8()?,
-                        reader: Reader::new(reader.read_slice(packet.len - reader.pos)?),
+                        reader: Reader::new(reader.read_u8_slice(packet.len - reader.pos)?),
                     })
                 }
                 SubeventCode::ConnectionUpdateComplete => {
@@ -136,19 +133,15 @@ impl<'p> HCIEvent<'p> {
                     return None;
                 }
             }),
-            code => {
-                log::warn!("{:?} is not implemented skipping", code);
-                return None;
-            }
         })
     }
 }
 
 #[derive(Debug)]
 pub struct DisconnectionCompleteEvent {
-    status: u8,
-    connection_handle: u16,
-    reason: u8, // Bluetooth Core Spec 6.0 | [Vol 1] Part F | page 410
+    pub status: u8,
+    pub connection_handle: u16,
+    pub reason: u8, // Bluetooth Core Spec 6.0 | [Vol 1] Part F | page 410
 }
 
 #[derive(Debug)]
@@ -169,15 +162,15 @@ pub enum LEMetaEvent<'p> {
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.7.65.1 | page 2324
 #[derive(Debug)]
 pub struct ConnectionCompleteEvent<'p> {
-    status: u8,
-    connection_handle: u16,
-    role: u8,
-    peer_address_type: u8,
-    peer_address: &'p [u8],
-    connection_interval: u16,
-    peripheral_latency: u16,
-    supervision_timeout: u16,
-    central_clock_accuracy: u8,
+    pub status: u8,
+    pub connection_handle: u16,
+    pub role: u8,
+    pub peer_address_type: u8,
+    pub peer_address: &'p [u8],
+    pub connection_interval: u16,
+    pub peripheral_latency: u16,
+    pub supervision_timeout: u16,
+    pub central_clock_accuracy: u8,
 }
 
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.7.65.2 | page 2327
@@ -193,11 +186,11 @@ pub struct AdvertisingReport<'p> {
 // Bluetooth Core spec 6.0 | [Vol 4] Part E, Section 7.7.65.3 | page 2330
 #[derive(Debug)]
 pub struct ConnectionUpdateCompleteEvent {
-    status: u8,
-    connection_handle: u16,
-    connection_interval: u16,
-    peripheral_latency: u16,
-    supervision_timeout: u16,
+    pub status: u8,
+    pub connection_handle: u16,
+    pub connection_interval: u16,
+    pub peripheral_latency: u16,
+    pub supervision_timeout: u16,
 }
 
 #[derive(Debug)]
@@ -217,11 +210,11 @@ impl<'p> Iterator for AdvertisingReportIterator<'p> {
         Some(AdvertisingReport {
             event_type: self.reader.read_u8()?,
             address_type: self.reader.read_u8()?,
-            address: self.reader.read_slice(6)?,
+            address: self.reader.read_u8_slice(6)?,
             data: {
                 let len = self.reader.read_u8()? as usize;
                 AdvertisingDataIterator {
-                    reader: Reader::new(self.reader.read_slice(len)?),
+                    reader: Reader::new(self.reader.read_u8_slice(len)?),
                 }
             },
             rssi: self.reader.read_u8()? as i8,
@@ -244,46 +237,34 @@ impl<'p> Iterator for AdvertisingDataIterator<'p> {
 
         let len = self.reader.read_u8()? as usize;
         let ad_type = self.reader.read_u8()?.into();
-        let data = self.reader.read_slice(len - size_of::<u8>())?;
+        let data = self.reader.read_u8_slice(len - size_of::<u8>())?;
         let mut reader = Reader::new(data);
 
         match ad_type {
-            AdvertisingDataType::Flags => Some(AdvertisingData::Flags(data[0])),
-            AdvertisingDataType::IncompleteListOf16BitServiceUUIDs => {
-                Some(AdvertisingData::IncompleteListOf16BitServiceUUIDs({
-                    unsafe { data.as_u16_slice()? }
-                }))
-            }
-            AdvertisingDataType::CompleteListOf16BitServiceUUIDs => {
-                Some(AdvertisingData::CompleteListOf16BitServiceUUIDs({
-                    unsafe { data.as_u16_slice()? }
-                }))
-            }
-            AdvertisingDataType::IncompleteListOf32BitServiceUUIDs => {
-                Some(AdvertisingData::IncompleteListOf32BitServiceUUIDs({
-                    unsafe { data.as_u32_slice()? }
-                }))
-            }
-            AdvertisingDataType::CompleteListOf32BitServiceUUIDs => {
-                Some(AdvertisingData::CompleteListOf32BitServiceUUIDs({
-                    unsafe { data.as_u32_slice()? }
-                }))
-            }
-            AdvertisingDataType::IncompleteListOf128BitServiceUUIDs => {
-                Some(AdvertisingData::IncompleteListOf128BitServiceUUIDs({
-                    unsafe { data.as_u128_slice()? }
-                }))
-            }
-            AdvertisingDataType::CompleteListOf128BitServiceUUIDs => {
-                Some(AdvertisingData::CompleteListOf128BitServiceUUIDs({
-                    unsafe { data.as_u128_slice()? }
-                }))
-            }
+            AdvertisingDataType::Flags => Some(AdvertisingData::Flags(reader.read_u8()?)),
+            AdvertisingDataType::IncompleteListOf16BitServiceUUIDs => Some(
+                AdvertisingData::IncompleteListOf16BitServiceUUIDs(reader.read_u16_slice(len)?),
+            ),
+            AdvertisingDataType::CompleteListOf16BitServiceUUIDs => Some(
+                AdvertisingData::CompleteListOf16BitServiceUUIDs(reader.read_u16_slice(len)?),
+            ),
+            AdvertisingDataType::IncompleteListOf32BitServiceUUIDs => Some(
+                AdvertisingData::IncompleteListOf32BitServiceUUIDs(reader.read_u32_slice(len)?),
+            ),
+            AdvertisingDataType::CompleteListOf32BitServiceUUIDs => Some(
+                AdvertisingData::CompleteListOf32BitServiceUUIDs(reader.read_u32_slice(len)?),
+            ),
+            AdvertisingDataType::IncompleteListOf128BitServiceUUIDs => Some(
+                AdvertisingData::IncompleteListOf128BitServiceUUIDs(reader.read_u128_slice(len)?),
+            ),
+            AdvertisingDataType::CompleteListOf128BitServiceUUIDs => Some(
+                AdvertisingData::CompleteListOf128BitServiceUUIDs(reader.read_u128_slice(len)?),
+            ),
             AdvertisingDataType::ShortenedLocalName => Some(AdvertisingData::ShortenedLocalName(
-                core::str::from_utf8(data).ok()?,
+                core::str::from_utf8(reader.read_u8_slice(reader.remaining())?).ok()?,
             )),
             AdvertisingDataType::CompleteLocalName => Some(AdvertisingData::CompleteLocalName(
-                core::str::from_utf8(data).ok()?,
+                core::str::from_utf8(reader.read_u8_slice(reader.remaining())?).ok()?,
             )),
             AdvertisingDataType::TxPowerLevel => {
                 Some(AdvertisingData::TxPowerLevel(reader.read_u8()? as i8))
@@ -292,17 +273,25 @@ impl<'p> Iterator for AdvertisingDataIterator<'p> {
                 Some(AdvertisingData::ClassOfDevice(reader.read_u32()?))
             }
             AdvertisingDataType::PeripheralConnectionIntervalRange => {
-                Some(AdvertisingData::PeripheralConnectionIntervalRange(data))
+                Some(AdvertisingData::PeripheralConnectionIntervalRange(
+                    reader.read_u8_slice(reader.remaining())?,
+                ))
             }
-            AdvertisingDataType::ServiceData => Some(AdvertisingData::ServiceData(data)),
+            AdvertisingDataType::ServiceData => Some(AdvertisingData::ServiceData(
+                reader.read_u8_slice(reader.remaining())?,
+            )),
             AdvertisingDataType::Appearance => {
                 Some(AdvertisingData::Appearance(reader.read_u16()?))
             }
             AdvertisingDataType::LEBluetoothDeviceAddress => {
-                Some(AdvertisingData::LEBluetoothDeviceAddress(data))
+                Some(AdvertisingData::LEBluetoothDeviceAddress(
+                    reader.read_u8_slice(reader.remaining())?,
+                ))
             }
             AdvertisingDataType::ManufacturerSpecificData => {
-                Some(AdvertisingData::ManufacturerSpecificData(data))
+                Some(AdvertisingData::ManufacturerSpecificData(
+                    reader.read_u8_slice(reader.remaining())?,
+                ))
             }
         }
     }
