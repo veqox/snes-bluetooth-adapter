@@ -10,19 +10,18 @@ test = false
 bench = false
 
 [dependencies]
-ble = { workspace = true }
-log = { workspace = true }
-
+ble = { git = "https://github.com/veqox/ble" }
+log = { version = "0.4.26" }
 critical-section = "1.2.0"
 embedded-io = "0.6.1"
 esp-alloc = "0.7.0"
 esp-hal = { version = "1.0.0-beta.0", features = ["esp32c3", "unstable"] }
 esp-wifi = { version = "0.13.0", features = [
-    "ble",
-    "builtin-scheduler",
-    "esp-alloc",
-    "esp32c3",
-    "log",
+	"ble",
+	"builtin-scheduler",
+	"esp-alloc",
+	"esp32c3",
+	"log",
 ] }
 heapless = { version = "0.8.0", default-features = false }
 esp-println = { version = "0.13.1", features = ["esp32c3", "log"] }

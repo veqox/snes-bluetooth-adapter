@@ -1,21 +1,10 @@
 [workspace]
 resolver = "2"
-members = [
-    "crates/bin",
-    "crates/ble",
-    "crates/macros",
-    "crates/state",
-    "crates/utils",
-]
+members = ["crates/bin", "crates/state"]
 default-members = ["crates/bin"]
 
 [workspace.dependencies]
-ble = { path = "crates/ble" }
-macros = { path = "crates/macros" }
 state = { path = "crates/state" }
-utils = { path = "crates/utils" }
-
-log = { version = "0.4.26" }
 
 [profile.dev]
 opt-level = "s"
