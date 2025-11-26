@@ -9,3 +9,4 @@ bench = false
 
 [dependencies]
 embedded-io = { workspace = true }
+ble-macros = { workspace = true }
