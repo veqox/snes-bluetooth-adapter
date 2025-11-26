@@ -1,9 +1,10 @@
-use core::{convert::Infallible, usize};
+use core::{convert::Infallible, u16, usize};
 
 use embedded_io::{ErrorType, Write};
 
 pub mod command;
 pub mod gap;
+pub mod packet;
 
 pub(crate) struct BufWriter<'a> {
     pub pos: usize,
@@ -58,5 +59,36 @@ impl WriteHCI for u16 {
 impl WriteHCI for [u8] {
     fn write_into<W: Write>(&self, w: &mut W) -> Result<(), W::Error> {
         w.write_all(self)
+    }
+}
+
+pub(crate) struct BufReader<'a> {
+    pub pos: usize,
+    pub buf: &'a [u8],
+}
+
+impl<'a> BufReader<'a> {
+    pub fn new(buf: &'a [u8]) -> Self {
+        Self { pos: 0, buf }
+    }
+
+    pub fn read_u8(&mut self) -> u8 {
+        let b = self.buf[self.pos];
+        self.pos += 1;
+        b
+    }
+
+    pub fn read_u16_le(&mut self) -> u16 {
+        u16::from_le_bytes([self.read_u8(), self.read_u8()])
+    }
+
+    pub fn read_bytes(&mut self, len: usize) -> &'a [u8] {
+        let bytes = &self.buf[self.pos..self.pos + len];
+        self.pos += len;
+        bytes
+    }
+
+    pub fn remaining(&self) -> usize {
+        self.buf.len() - self.pos
     }
 }

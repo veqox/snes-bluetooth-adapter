@@ -4,6 +4,7 @@
 use ble::hci::{
     command::{Command, Reset, SetAdvData, SetAdvEnable, SetAdvParameters, SetScanResponseData},
     gap::{AD_FLAG_BR_EDR_NOT_SUPPORTED, AD_FLAG_GENERAL_DISCOVERABLE_MODE, AdvData},
+    packet::HCIPacket,
 };
 
 use esp_hal::{chip, clock, interrupt::software, main, timer::timg};
@@ -76,7 +77,7 @@ fn main() -> ! {
     loop {
         match connector.next(&mut buf) {
             Ok(0) => continue,
-            Ok(len) => info!("received {} bytes: {:?}", len, &buf[..len]),
+            Ok(len) => info!("{:?}", HCIPacket::from_bytes(&buf[..len])),
             Err(err) => warn!("read failed with {}", err),
         }
     }
