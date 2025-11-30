@@ -1,5 +1,4 @@
 use crate::hci::{BufWriter, WriteHCI, gap::AdvData};
-use ble_macros::command;
 use embedded_io::Write;
 
 // const OGF_LINK_CONTROL_COMMAND: u16 = 0x01;
@@ -29,19 +28,91 @@ pub trait Command {
     fn write_payload<W: Write>(&self, w: &mut W) -> Result<(), W::Error>;
 }
 
-#[command(ogf = OGF_CONTROL_AND_BASEBAND_COMMAND, ocf = 0x03)]
-pub struct Reset {}
+macro_rules! command {
+    (
+        OGF = $OGF:expr;
+        OCF = $OCF:expr;
+        struct $name:ident <$lt:lifetime> {
+            $($field:ident : $ty:ty),* $(,)?
+        }
+    ) => {
+        pub struct $name <$lt> {
+            $(pub $field: $ty),*
+        }
 
-#[command(ogf = OGF_LE_CONTROLLER_COMMAND, ocf = 0x06)]
-pub struct SetAdvParameters {
-    pub interval_min: u16,
-    pub interval_max: u16,
-    pub advertising_type: u8,
-    pub own_address_type: u8,
-    pub peer_address_type: u8,
-    pub peer_address: [u8; 6],
-    pub advertising_channel_map: u8,
-    pub advertising_filter_policy: u8,
+        impl <$lt> $name <$lt> {
+            pub fn new($($field: $ty),*) -> Self {
+                Self {
+                    $($field),*
+                }
+            }
+        }
+
+        impl <$lt> Command for $name <$lt> {
+            const OGF: u16 = $OGF;
+            const OCF: u16 = $OCF;
+            const PARAM_LEN: u8 = (0 $( + core::mem::size_of::<$ty>())*) as u8;
+
+            fn write_payload<W: Write>(&self, w: &mut W) -> Result<(), W::Error> {
+                $(self.$field.write_into(w)?;)*
+
+                Ok(())
+            }
+        }
+    };
+    (
+        OGF = $OGF:expr;
+        OCF = $OCF:expr;
+        struct $name:ident {
+            $($field:ident : $ty:ty),* $(,)?
+        }
+    ) => {
+        pub struct $name {
+            $(pub $field: $ty),*
+        }
+
+        impl $name {
+            pub fn new($($field: $ty),*) -> Self {
+                Self {
+                    $($field),*
+                }
+            }
+        }
+
+
+        impl Command for $name {
+            const OGF: u16 = $OGF;
+            const OCF: u16 = $OCF;
+            const PARAM_LEN: u8 = (0 $( + core::mem::size_of::<$ty>())*) as u8;
+
+            fn write_payload<W: Write>(&self, #[allow(unused)] w: &mut W) -> Result<(), W::Error> {
+                $(self.$field.write_into(w)?;)*
+
+                Ok(())
+            }
+       }
+    };
+}
+
+command! {
+    OGF = OGF_CONTROL_AND_BASEBAND_COMMAND;
+    OCF = 0x03;
+    struct Reset {}
+}
+
+command! {
+    OGF = OGF_LE_CONTROLLER_COMMAND;
+    OCF = 0x06;
+    struct SetAdvParameters {
+        interval_min: u16,
+        interval_max: u16,
+        advertising_type: u8,
+        own_address_type: u8,
+        peer_address_type: u8,
+        peer_address: [u8; 6],
+        advertising_channel_map: u8,
+        advertising_filter_policy: u8,
+    }
 }
 
 pub struct SetAdvData<'a> {
@@ -104,7 +175,10 @@ impl<'a> Command for SetScanResponseData<'_> {
     }
 }
 
-#[command(ogf = OGF_LE_CONTROLLER_COMMAND, ocf = 0x0A)]
-pub struct SetAdvEnable {
-    pub enable: u8,
+command! {
+    OGF = OGF_LE_CONTROLLER_COMMAND;
+    OCF = 0x0A;
+    struct SetAdvEnable {
+        enable: u8,
+    }
 }

@@ -1,10 +1,24 @@
-use core::{convert::Infallible, u16, usize};
+use core::{convert::Infallible, fmt::Debug, u16, usize};
 
 use embedded_io::{ErrorType, Write};
 
 pub mod command;
+pub mod event;
 pub mod gap;
 pub mod packet;
+
+pub struct MacAddr(pub [u8; 6]);
+
+impl Debug for MacAddr {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let b = self.0;
+        write!(
+            f,
+            "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+            b[0], b[1], b[2], b[3], b[4], b[5]
+        )
+    }
+}
 
 pub(crate) struct BufWriter<'a> {
     pub pos: usize,
@@ -90,5 +104,33 @@ impl<'a> BufReader<'a> {
 
     pub fn remaining(&self) -> usize {
         self.buf.len() - self.pos
+    }
+}
+
+pub(crate) trait ReadHCI<'a> {
+    fn read_from(r: &mut BufReader<'a>) -> Self;
+}
+
+impl<'a> ReadHCI<'a> for u8 {
+    fn read_from(r: &mut BufReader) -> Self {
+        r.read_u8()
+    }
+}
+
+impl<'a> ReadHCI<'a> for u16 {
+    fn read_from(r: &mut BufReader) -> Self {
+        r.read_u16_le()
+    }
+}
+
+impl<'a> ReadHCI<'a> for MacAddr {
+    fn read_from(r: &mut BufReader) -> Self {
+        MacAddr(r.read_bytes(6).try_into().unwrap())
+    }
+}
+
+impl<'a> ReadHCI<'a> for &'a [u8] {
+    fn read_from(r: &mut BufReader<'a>) -> Self {
+        r.read_bytes(r.remaining())
     }
 }

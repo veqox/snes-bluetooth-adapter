@@ -1,12 +1,12 @@
 use core::fmt::Debug;
 
-use crate::hci::BufReader;
+use crate::hci::{BufReader, event::HCIEvent};
 
 #[derive(Debug)]
 pub enum HCIPacket<'a> {
-    ACLData(ACLDataPacket<'a>),
-    SynchronousData(SynchronousDataPacket<'a>),
-    Event(EventPacket<'a>),
+    ACLData(ACLData<'a>),
+    SynchronousData(SynchronousData<'a>),
+    Event(HCIEvent<'a>),
     Unknown { packet_type: u8, data: &'a [u8] },
 }
 
@@ -15,11 +15,11 @@ impl<'a> HCIPacket<'a> {
         let mut reader = BufReader::new(buf);
 
         match reader.read_u8() {
-            ACLDataPacket::TYPE => Self::ACLData(ACLDataPacket::from_reader(&mut reader)),
-            SynchronousDataPacket::TYPE => {
-                Self::SynchronousData(SynchronousDataPacket::from_reader(&mut reader))
+            ACLData::TYPE => Self::ACLData(ACLData::from_reader(&mut reader)),
+            SynchronousData::TYPE => {
+                Self::SynchronousData(SynchronousData::from_reader(&mut reader))
             }
-            EventPacket::TYPE => Self::Event(EventPacket::from_reader(&mut reader)),
+            HCIEvent::TYPE => Self::Event(HCIEvent::from_reader(&mut reader)),
             packet_type => Self::Unknown {
                 packet_type,
                 data: reader.read_bytes(reader.remaining()),
@@ -28,14 +28,14 @@ impl<'a> HCIPacket<'a> {
     }
 }
 
-pub struct ACLDataPacket<'a> {
+pub struct ACLData<'a> {
     pub handle: u16,
     pub boundary_flag: u8,
     pub broadcast_flag: u8,
     pub data: &'a [u8],
 }
 
-impl<'a> Debug for ACLDataPacket<'a> {
+impl<'a> Debug for ACLData<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("ACLDataPacket")
             .field("handle", &self.handle)
@@ -52,7 +52,7 @@ impl<'a> Debug for ACLDataPacket<'a> {
     }
 }
 
-impl<'a> ACLDataPacket<'a> {
+impl<'a> ACLData<'a> {
     pub const TYPE: u8 = 0x02;
 
     pub(crate) fn from_reader(reader: &mut BufReader<'a>) -> Self {
@@ -74,13 +74,13 @@ impl<'a> ACLDataPacket<'a> {
     }
 }
 
-pub struct SynchronousDataPacket<'a> {
+pub struct SynchronousData<'a> {
     pub handle: u16,
     pub status_flag: u8,
     pub data: &'a [u8],
 }
 
-impl<'a> Debug for SynchronousDataPacket<'a> {
+impl<'a> Debug for SynchronousData<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("SynchronousDataPacket")
             .field("handle", &self.handle)
@@ -90,7 +90,7 @@ impl<'a> Debug for SynchronousDataPacket<'a> {
     }
 }
 
-impl<'a> SynchronousDataPacket<'a> {
+impl<'a> SynchronousData<'a> {
     pub const TYPE: u8 = 0x03;
 
     pub(crate) fn from_reader(reader: &mut BufReader<'a>) -> Self {
@@ -110,28 +110,16 @@ impl<'a> SynchronousDataPacket<'a> {
     }
 }
 
-pub struct EventPacket<'a> {
+pub struct Event<'a> {
     pub ev_code: u8,
     pub params: &'a [u8],
 }
 
-impl<'a> Debug for EventPacket<'a> {
+impl<'a> Debug for Event<'a> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         f.debug_struct("EventPacket")
             .field("ev_code", &format_args!("0x{:02X}", self.ev_code))
             .field("params", &self.params)
             .finish()
-    }
-}
-
-impl<'a> EventPacket<'a> {
-    pub const TYPE: u8 = 0x04;
-
-    pub(crate) fn from_reader(reader: &mut BufReader<'a>) -> Self {
-        let ev_code = reader.read_u8();
-        let param_len = reader.read_u8() as usize;
-        let params = reader.read_bytes(param_len);
-
-        Self { ev_code, params }
     }
 }
